@@ -19,7 +19,10 @@ HTML_HEADER = '''
       <div class="container page-nav">
         <div class="content">
           <h2>Upgrade Points for {0}</h2>
-          <div class="row event_info">Since {1}</div>
+          <div class="row event_info">
+            Points Earned Since {1}<br>
+            <a href="upgrades.csv">Download Raw CSV</a>
+          </div>
           <p class="created_updated">Updated {2}</p>
     <!-- Start Content -->'''
 
@@ -91,6 +94,13 @@ HTML_FOOTER = '''
     <!-- End Content -->
         </div>
       </div>
+      <div class="container page-nav">
+        <footer>
+          <ul>
+            <li><a class="link" href="https://github.com/brandond/obra-upgrade-calculator/">OBRA Upgrade Calculator</a></li>
+          </ul>
+        </footer>
+      </div>
     </body>
     </html>'''
 
@@ -106,15 +116,15 @@ class OutputBase(object):
             self.header()
         return self
 
-    def start_upgrades():
+    def start_upgrades(self):
         """Called at the start of the Upgrades block"""
         pass
 
-    def upgrade():
+    def upgrade(self, upgrade):
         """Called to print a single person who needs an upgrade"""
         pass
 
-    def end_upgrades():
+    def end_upgrades(self):
         """Called at the end of the Upgrades block"""
         pass
 
