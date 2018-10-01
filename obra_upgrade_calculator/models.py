@@ -3,7 +3,7 @@ import logging
 from os.path import expanduser
 from datetime import datetime, timedelta
 
-from peewee import Model
+from peewee import Model, BooleanField
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
                                 DateTimeField, ForeignKeyField, IntegerField)
 from playhouse.sqlite_ext import JSONField
@@ -109,6 +109,10 @@ class Points(Model):
     place = IntegerField(verbose_name='Place')
     starters = IntegerField(verbose_name='Starting Field Size')
     points = IntegerField(verbose_name='Points for Place')
+    needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
+    sum_points = IntegerField(verbose_name='Current Points', null=True)
+    sum_categories = JSONField(verbose_name='Current Category', null=True)
+    sum_notes = CharField(verbose_name='Current Notes', null=True)
 
     class Meta:
         database = db

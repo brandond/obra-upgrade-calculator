@@ -23,6 +23,34 @@ HTML_HEADER = '''
           <p class="created_updated">Updated {2}</p>
     <!-- Start Content -->'''
 
+HTML_UPGRADES_HEADER = '''
+    <!-- Start Upgrades -->
+          <div class="event_info">
+            <h4 class="race">Upgrades Due</h4>
+            <table class="base table-striped event_races">
+              <thead>
+                <tr>
+                  <th class="race">Category</th>
+                  <th class="race">Name</th>
+                  <th class="points_total">Total Pts</th>
+                </tr>
+              </thead>
+              <tbody>'''
+
+HTML_UPGRADE = '''
+    <!-- Upgrade -->
+                <tr>
+                  <td class="race">{1}</td>
+                  <td class="race"><a href="#person_{0.person.id}">{0.person.first_name} {0.person.last_name}</td>
+                  <td class="points_total">{0.sum_points}</td>
+                </tr>'''
+
+HTML_UPGRADES_FOOTER = '''
+    <!-- End Upgrades -->
+              </tbody>
+            </table>
+          </div>'''
+
 HTML_PERSON_HEADER = '''
     <!-- Start Person -->
           <h3 class="race" id="person_{0.id}"><a href="https://obra.org/people/{0.id}">{0.first_name} {0.last_name}</a></h3>
@@ -31,7 +59,7 @@ HTML_PERSON_HEADER = '''
               <tr>
                 <th class="place"></th>
                 <th class="points hidden-xs">Points</th>
-                <th class="points">Total Pts</th>
+                <th class="points_total">Total Pts</th>
                 <th class="event">Event</th>
                 <th class="category">Category</th>
                 <th class="place">Category</th>
@@ -78,11 +106,23 @@ class OutputBase(object):
             self.header()
         return self
 
+    def start_upgrades():
+        """Called at the start of the Upgrades block"""
+        pass
+
+    def upgrade():
+        """Called to print a single person who needs an upgrade"""
+        pass
+
+    def end_upgrades():
+        """Called at the end of the Upgrades block"""
+        pass
+
     def start_person(self, person):
         """Called at the start of each Person"""
         pass
 
-    def point(self, point, categories, points_sum, upgrade_note):
+    def point(self, point):
         """Called to print a single point"""
         pass
 
@@ -102,29 +142,38 @@ class TextOutput(OutputBase):
         self.output.write('--- Upgrade Points Earned In {} Races Since {} ---\n\n'.format(
             self.event_type.capitalize(), self.start_date.strftime('%Y-%m-%d')))
 
-    def point(self, point, categories, points_sum, upgrade_note):
+    def point(self, point):
         self.output.write('{0:<24s} | {1:>2d} points in Cat {2:<3s} | {3:>2d} for {4:d}/{5:<2d} at {6}: {7} on {8}  {9}\n'.format(
             ', '.join([point.person.last_name, point.person.first_name]),
-            points_sum,
-            '/'.join(str(c) for c in categories),
+            point.sum_points,
+            '/'.join(str(c) for c in point.sum_categories),
             point.points,
             point.place,
             point.starters,
             point.race.event.name,
             point.race.name,
             point.race.date,
-            '*** ' + upgrade_note + ' ***' if upgrade_note else ''))
+            '*** ' + point.sum_notes + ' ***' if point.sum_notes else ''))
 
 
 class HtmlOutput(OutputBase):
     def header(self):
         self.output.write(dedent(HTML_HEADER).format(self.event_type.capitalize(), self.start_date.strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
+    def start_upgrades(self):
+        self.output.write(dedent(HTML_UPGRADES_HEADER))
+
+    def upgrade(self, upgrade):
+        self.output.write(dedent(HTML_UPGRADE).format(upgrade, '/'.join(str(c) for c in upgrade.sum_categories)))
+
+    def end_upgrades(self):
+        self.output.write(dedent(HTML_UPGRADES_FOOTER))
+
     def start_person(self, person):
         self.output.write(dedent(HTML_PERSON_HEADER).format(person))
 
-    def point(self, point, categories, points_sum, upgrade_note):
-        self.output.write(dedent(HTML_POINT).format(point, points_sum, '/'.join(str(c) for c in categories), upgrade_note))
+    def point(self, point):
+        self.output.write(dedent(HTML_POINT).format(point, point.sum_points, '/'.join(str(c) for c in point.sum_categories), point.sum_notes))
 
     def end_person(self, person, final=False):
         self.output.write(dedent(HTML_PERSON_FOOTER))
@@ -147,15 +196,15 @@ class JsonOutput(OutputBase):
         self.output.write('      "last_name": "{}",\n'.format(person.last_name))
         self.output.write('      "points": [\n')
 
-    def point(self, point, categories, points_sum, upgrade_note):
+    def point(self, point):
         if self.point_buffer:
             self.output.write(self.point_buffer + ',\n')
 
         self.point_buffer = '        { '
         self.point_buffer += '"place": {}, "starters": {}, "points": {}, "point_total": {}, '.format(
-            point.place, point.starters, point.points, points_sum)
+            point.place, point.starters, point.points, point.sum_points)
         self.point_buffer += '"category": "{}", "event": "{}", "race": "{}", "date": "{}", "notes": "{}" '.format(
-            '/'.join(str(c) for c in categories), point.race.event.name, point.race.name, point.race.date, upgrade_note)
+            '/'.join(str(c) for c in point.sum_categories), point.race.event.name, point.race.name, point.race.date, point.sum_notes)
         self.point_buffer += '}'
 
     def end_person(self, person, final=False):
@@ -172,19 +221,19 @@ class CsvOutput(OutputBase):
     def header(self):
         self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
 
-    def point(self, point, categories, points_sum, upgrade_note):
+    def point(self, point):
         self.output.write('{0:>1d},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\t\n'.format(
             point.place,
             point.starters,
             point.points,
-            points_sum,
+            point.sum_points,
             point.person.first_name,
             point.person.last_name,
-            '/'.join(str(c) for c in categories),
+            '/'.join(str(c) for c in point.sum_categories),
             point.race.event.name,
             point.race.name,
             point.race.date,
-            upgrade_note))
+            point.sum_notes))
 
 type_map = {
     'text': TextOutput,

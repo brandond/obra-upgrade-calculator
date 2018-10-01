@@ -17,7 +17,7 @@ def cli(type, format, scrape, debug):
 
     # Import these after setting up logging otherwise we don't get logs
     from .scrapers import scrape_year, scrape_new, scrape_recent
-    from .upgrades import recalculate_points, print_points
+    from .upgrades import recalculate_points, print_points, sum_points
 
     if scrape:
         # Scrape last two years of results
@@ -33,6 +33,7 @@ def cli(type, format, scrape, debug):
 
         # Calculate points from new data
         recalculate_points(type)
+        sum_points(type)
 
     # Finally, output data
     print_points(type, format)
