@@ -1,6 +1,7 @@
 
 import logging
 from os.path import expanduser
+from datetime import datetime, timedelta
 
 from peewee import Model
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
@@ -58,13 +59,36 @@ class Race(Model):
 
 class Person(Model):
     id = IntegerField(verbose_name='Person ID', primary_key=True)
-    obra_id = IntegerField(verbose_name='OBRA ID', null=True)
     first_name = CharField(verbose_name='First Name')
     last_name = CharField(verbose_name='Last Name')
 
     class Meta:
         database = db
         only_save_dirty = True
+
+
+class ObraPerson(Model):
+    license = IntegerField(verbose_name='License', primary_key=True)
+    person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
+    mtb_category = IntegerField(verbose_name='MTB Category', null=True)
+    dh_category = IntegerField(verbose_name='DH Category', null=True)
+    ccx_category = IntegerField(verbose_name='CX Category', null=True)
+    road_category = IntegerField(verbose_name='Road Category', null=True)
+    track_category = IntegerField(verbose_name='Track Category', null=True)
+    updated = DateTimeField(verbose_name='Person Updated')
+
+    class Meta:
+        database = db
+        only_save_dirty = True
+
+    def category(self, event_type):
+        event_type = event_type.replace('mountain_bike', 'mtb')
+        event_type = event_type.replace('cyclocross', 'ccx')
+        event_type = event_type.replace('downhill', 'dh')
+        return getattr(self, event_type + '_category', None)
+
+    def is_expired(self):
+        return datetime.now() - self.updated >= timedelta(days=1)
 
 
 class Result(Model):
@@ -81,7 +105,7 @@ class Result(Model):
 class Points(Model):
     person = ForeignKeyField(verbose_name='Points Person', model=Person, null=True)
     race = ForeignKeyField(verbose_name='Points from Race', model=Race)
-    categories = JSONField(verbose_name='Points in Categories')
+    categories = JSONField(verbose_name='Point in Categories')
     place = IntegerField(verbose_name='Place')
     starters = IntegerField(verbose_name='Starting Field Size')
     points = IntegerField(verbose_name='Points for Place')
@@ -99,6 +123,7 @@ Series.create_table(fail_silently=True)
 Event.create_table(fail_silently=True)
 Race.create_table(fail_silently=True)
 Person.create_table(fail_silently=True)
+ObraPerson.create_table(fail_silently=True)
 Result.create_table(fail_silently=True)
 Points.create_table(fail_silently=True)
-logging.info('Using local database {} at {}'.format(db, db.database))
+logging.debug('Using local database {} at {}'.format(db, db.database))

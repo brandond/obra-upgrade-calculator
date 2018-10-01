@@ -2,13 +2,16 @@
 import logging
 from datetime import datetime
 
+from .outputs import type_map
 import click
 
 
 @click.command()
 @click.option('--type', type=click.Choice(['cyclocross']), required=True)
+@click.option('--format', type=click.Choice(sorted(type_map.keys())), default='text')
+@click.option('--scrape/--no-scrape', default=True)
 @click.option('--debug/--no-debug', default=False)
-def cli(type, debug):
+def cli(type, format, scrape, debug):
     log_level = 'DEBUG' if debug else 'INFO'
     logging.basicConfig(level=log_level)
 
@@ -16,20 +19,23 @@ def cli(type, debug):
     from .scrapers import scrape_year, scrape_new, scrape_recent
     from .upgrades import recalculate_points, print_points
 
-    # Scrape last two years of results
-    year = datetime.now().year
-    scrape_year(year - 1, type)
-    scrape_year(year, type)
+    if scrape:
+        # Scrape last two years of results
+        year = datetime.now().year
+        scrape_year(year - 1, type)
+        scrape_year(year, type)
 
-    # Load in anything new
-    scrape_new()
+        # Load in anything new
+        scrape_new()
 
-    # Check for updates to anything touched in the last three days
-    scrape_recent(3)
+        # Check for updates to anything touched in the last three days
+        scrape_recent(3)
 
-    # Calculate and print points
-    recalculate_points(type)
-    print_points(type)
+        # Calculate points from new data
+        recalculate_points(type)
+
+    # Finally, output data
+    print_points(type, format)
 
 
 if __name__ == '__main__':

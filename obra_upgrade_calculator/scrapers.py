@@ -5,7 +5,7 @@ import requests
 from lxml import html
 from peewee import JOIN, fn
 
-from .models import Event, Person, Race, Result, Series
+from .models import Event, Person, ObraPerson, Race, Result, Series
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
@@ -173,3 +173,26 @@ def scrape_event(event):
                            person_id=result['person_id'],
                            place=result['place'])
                    .execute())
+
+
+def scrape_person(person):
+    logger.info('Scraping Person data for {}'.format(person.id))
+    url = 'http://obra.org/people/{}/1900'.format(person.id)
+    response = session.get(url)
+    response.raise_for_status()
+
+    kwargs = {'person': person, 'updated': datetime.now()}
+    tree = html.fromstring(response.text)
+    for attr in ['license', 'mtb_category', 'dh_category', 'ccx_category', 'road_category', 'track_category']:
+        path = '//p[@id="person_{}"]'.format(attr)
+        elem = tree.xpath(path)
+        if elem and elem[0].text:
+            try:
+                value = int(elem[0].text)
+            except ValueError:
+                value = 0
+            kwargs[attr] = value
+
+    (ObraPerson.insert(**kwargs)
+               .on_conflict_replace()
+               .execute())
