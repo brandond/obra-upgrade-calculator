@@ -128,7 +128,7 @@ def sum_points(event_type):
             needed_upgrade = False
 
         # Here's the goofy category change logic
-        if needed_upgrade and min(categories) > min(point.categories):
+        if needed_upgrade and min(point.categories) == max(categories) - 1:
             upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(categories) - 1, points_sum))
             points_sum = 0
             needed_upgrade = False
@@ -276,7 +276,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
     # FIXME - need to handle pro/elite (cat 0) for MTB
     if categories == {1} or is_cat_1:
         return False
-    elif 2 in categories:
+    elif categories == {2}:
         return points_sum >= 35
     else:
         return points_sum >= 20

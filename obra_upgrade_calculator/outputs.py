@@ -232,7 +232,7 @@ class CsvOutput(OutputBase):
         self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
 
     def point(self, point):
-        self.output.write('{0:>1d},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\t\n'.format(
+        self.output.write('{0:>1d},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
             point.place,
             point.starters,
             point.points,

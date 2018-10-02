@@ -1,4 +1,5 @@
 lxml
+click
 requests
 apsw >= 3.24.0
 peewee >= 3.7.0
