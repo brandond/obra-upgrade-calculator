@@ -93,7 +93,7 @@ def recalculate_points(event_type):
 
 
 def sum_points(event_type):
-    start_date = datetime.now() - timedelta(days=365)
+    start_date = datetime.now() - timedelta(days=395)
 
     query = (Points.select(Points,
                            Person,
@@ -172,7 +172,7 @@ def print_points(event_type, output_format):
     tracked historical rider categories, but all you get is a point in time snapshot at
     the time the data is retrieved.
     """
-    start_date = datetime.now() - timedelta(days=365)
+    start_date = datetime.now() - timedelta(days=395)
 
     latest_points = (Points.select(Points,
                                    Person.id,
@@ -274,10 +274,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
         is_cat_1 = obra.category(event_type) == 1
 
     # FIXME - need to handle pro/elite (cat 0) for MTB
-    if categories == {1,2} and is_cat_1:
-        categories.remove(2)
-        return False
-    elif categories == {1} or is_cat_1:
+    if categories == {1} or is_cat_1:
         return False
     elif 2 in categories:
         return points_sum >= 35
