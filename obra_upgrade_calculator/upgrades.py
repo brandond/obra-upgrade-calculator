@@ -276,7 +276,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
     # FIXME - need to handle pro/elite (cat 0) for MTB
     if categories == {1} or is_cat_1:
         return False
-    elif categories == {1,2} or categories == {2}:
+    elif 2 in categories and not 3 in categories:
         return points_sum >= 35
     else:
         return points_sum >= 20
