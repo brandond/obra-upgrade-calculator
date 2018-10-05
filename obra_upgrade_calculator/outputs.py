@@ -175,6 +175,10 @@ class TextOutput(OutputBase):
             point.result.race.date,
             point.sum_notes))
 
+    def end_person(self, person, final=False):
+        if not final:
+            self.output.write('-------------------------|----------------------|---------------------\n')
+
 
 class HtmlOutput(OutputBase):
     def header(self):

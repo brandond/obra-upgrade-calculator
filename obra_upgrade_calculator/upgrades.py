@@ -91,7 +91,7 @@ def recalculate_points(event_type):
             logger.info('Invalid category or insufficient starters for this field')
 
 
-def sum_points(event_type):
+def sum_points(event_type, strict_upgrades=False):
     """
     Calculate running points totals and detect upgrades
     Note that this is hardcoded to give a point-in-time result from the date the script is run.
@@ -123,16 +123,16 @@ def sum_points(event_type):
     points_sum = 0
     categories = {9}
     needed_upgrade = False
+    upgrade_notes = set()
 
     for result in prefetch(results, Points):
-        upgrade_notes = []
-
         # Print a sum and reset stats when the person changes
         if person != result.person:
             person = result.person
             points_sum = 0
             categories = {9}
             needed_upgrade = False
+            upgrade_notes.clear()
 
         if not result.race.categories:
             logger.info('{0}, {1}: {2} points for {3} in {4}'.format(
@@ -143,43 +143,53 @@ def sum_points(event_type):
                 result.race.name))
             continue
 
+        upgrade_category = max(categories) - 1
+
         # Here's the goofy category change logic
-        if needed_upgrade and min(result.race.categories) == max(categories) - 1:
-            upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(categories) - 1, points_sum))
+        if strict_upgrades and needed_upgrade and upgrade_category in result.race.categories:
+            # Needed an upgrade, and is racing in the new category - grant it
+            upgrade_notes.add('UPGRADED TO {} AFTER {} POINTS'.format(upgrade_category, points_sum))
             points_sum = 0
             needed_upgrade = False
-            categories = {max(categories) - 1}
+            categories = {upgrade_category}
         elif not categories.intersection(result.race.categories) and min(categories) > min(result.race.categories):
+            # Race category does not overlap with rider category, and the race cateogory is more skilled
             if categories == {9}:
+                # First result for this rider, assign rider current race category - which may be multiple, such as 1/2 or 3/4
                 categories = set(result.race.categories)
             elif can_upgrade(event_type, points_sum, max(result.race.categories)):
-                    upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(result.race.categories), points_sum))
-                    points_sum = 0
-                    needed_upgrade = False
-                    categories = {max(result.race.categories)}
+                # Has enough points to upgrade to this category, grant it
+                upgrade_notes.add('UPGRADED TO {} AFTER {} POINTS'.format(max(result.race.categories), points_sum))
+                points_sum = 0
+                needed_upgrade = False
+                categories = {max(result.race.categories)}
             else:
-                upgrade_notes.append('NO POINTS FOR RACING ABOVE CATEGORY')
+                # Can't self-upgrade to this category, block it
                 if result.points:
+                    upgrade_notes.add('NO POINTS FOR RACING ABOVE CATEGORY')
                     result.points[0].value = 0
         elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
-            upgrade_notes.append('NO POINTS FOR RACING BELOW CATEGORY')
+            # Race category does not overlap with rider category, and the race category is less skilled
             if result.points:
+                upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                 result.points[0].value = 0
         elif len(categories.intersection(result.race.categories)) == 1 and len(categories) > 1:
+            # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
 
         if result.points:
             points_sum += result.points[0].value
 
             if needs_upgrade(result.person, event_type, points_sum, categories):
-                upgrade_notes.append('NEEDS UPGRADE')
+                upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
                 needed_upgrade = True
 
             result.points[0].sum_categories = list(categories)
             result.points[0].sum_value = points_sum
-            result.points[0].sum_notes = '; '.join(upgrade_notes)
+            result.points[0].sum_notes = '; '.join(reversed(list(upgrade_notes)))
             result.points[0].save()
+            upgrade_notes.clear()
 
         logger.info('{0}, {1}: {2} points for {3} in {4} race at {5}'.format(
             result.person.last_name,

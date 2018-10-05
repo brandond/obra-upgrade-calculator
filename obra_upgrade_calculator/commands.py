@@ -11,8 +11,9 @@ from .outputs import type_map
 @click.option('--type', type=click.Choice(['cyclocross']), required=True)
 @click.option('--format', type=click.Choice(sorted(type_map.keys())), default='text')
 @click.option('--scrape/--no-scrape', default=True)
+@click.option('--strict/--no-strict', default=False)
 @click.option('--debug/--no-debug', default=False)
-def cli(type, format, scrape, debug):
+def cli(type, format, scrape, strict, debug):
     log_level = 'DEBUG' if debug else 'INFO'
     logging.basicConfig(level=log_level)
 
@@ -34,7 +35,7 @@ def cli(type, format, scrape, debug):
 
         # Calculate points from new data
         recalculate_points(type)
-        sum_points(type)
+        sum_points(type, strict)
 
     # Finally, output data
     print_points(type, format)
