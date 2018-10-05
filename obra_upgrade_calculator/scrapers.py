@@ -10,7 +10,7 @@ from .models import Event, ObraPerson, Person, Race, Result, Series
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
-CATEGORY_RE = re.compile(r'(beginner|\d/\d|\d)(?!\d?\+)', flags=re.I)
+CATEGORY_RE = re.compile(r'(beginner|\d(/\d)+|\d)(?!\d?\+)', flags=re.I)
 
 
 def scrape_year(year, event_type):
