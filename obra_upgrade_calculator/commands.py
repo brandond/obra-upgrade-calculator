@@ -2,8 +2,9 @@
 import logging
 from datetime import datetime
 
-from .outputs import type_map
 import click
+
+from .outputs import type_map
 
 
 @click.command()

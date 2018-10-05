@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import sys
 from os import chdir
 from os.path import abspath, dirname
 

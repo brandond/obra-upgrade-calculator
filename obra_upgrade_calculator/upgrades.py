@@ -1,17 +1,15 @@
 from __future__ import print_function
 
 import logging
-import re
 from datetime import datetime, timedelta
 
-from peewee import JOIN, fn
+from peewee import JOIN, fn, prefetch
 
 from .models import Event, Person, Points, Race, Result
 from .outputs import get_writer
 from .scrapers import scrape_person
 
 logger = logging.getLogger(__name__)
-CATEGORY_RE = re.compile(r'(beginner|\d/\d|\d)(?!\d?\+)', flags=re.I)
 SCHEDULE = {
     'cyclocross': {
         'open': [
@@ -33,11 +31,14 @@ def recalculate_points(event_type):
     """
     Recalculate points totals for all races of this type.
     """
+    start_date = datetime.now() - timedelta(days=395)
+
     # Remove any previously calculated points for this event type
     (Points.delete()
-           .where(Points.race_id << (Race.select(Race.id)
-                                         .join(Event)
-                                         .where(Event.type == event_type)))
+           .where(Points.result_id << (Result.select(Result.id)
+                                             .join(Race)
+                                             .join(Event)
+                                             .where(Event.type == event_type)))
            .execute())
 
     # Get all races in the last year with a minimum number of starters, filtering out non-eligible fields
@@ -50,6 +51,7 @@ def recalculate_points(event_type):
                  .where(~(Race.name.contains('stampede')))
                  .where(~(Race.name.contains('single')))
                  .where(~(Result.place.contains('dns')))
+                 .where(Race.date >= start_date)
                  .join(Event)
                  .switch(Race)
                  .join(Result, JOIN.LEFT_OUTER)
@@ -61,12 +63,12 @@ def recalculate_points(event_type):
             race.event.id, race.event.name, race.id, race.name, race.date, race.result_count))
 
         # Extract categories from field name and check points depth for gender and field size
-        categories = get_categories(race)
         points = get_points_schedule(event_type, race)
 
-        if categories and points:
+        if race.categories and points:
             # If everything looks good, get the top N finishers for this race and assign points
-            results = (race.results.select(Result.place,
+            results = (race.results.select(Result.id,
+                                           Result.place,
                                            Person.id,
                                            Person.first_name,
                                            Person.last_name,
@@ -81,170 +83,182 @@ def recalculate_points(event_type):
                     result.person.first_name,
                     points[result.zplace],
                     result.place))
-                (Points.insert(person_id=result.person.id,
-                               race_id=race.id,
-                               categories=categories,
-                               place=result.place,
+                (Points.insert(result=result,
                                starters=race.result_count,
-                               points=points[result.zplace])
+                               value=points[result.zplace])
                        .execute())
         else:
             logger.info('Invalid category or insufficient starters for this field')
 
 
 def sum_points(event_type):
-    start_date = datetime.now() - timedelta(days=395)
-
-    query = (Points.select(Points,
-                           Person,
-                           Race.id,
-                           Race.name,
-                           Race.date,
-                           Event.id,
-                           Event.name)
-                   .join(Person)
-                   .switch(Points)
-                   .join(Race)
-                   .join(Event)
-                   .where(Event.type == event_type)
-                   .where(Race.date >= start_date)
-                   .where(fn.LENGTH(Person.last_name) > 1)
-                   .order_by(Person.last_name.collate('NOCASE').asc(),
-                             Person.first_name.collate('NOCASE').asc(),
-                             Race.date.asc()))
-
-    person = None
-    points_sum = 0
-    categories = {9}
-    needed_upgrade = False
-
-    for point in query.execute():
-        upgrade_notes = []
-        # Print a sum and reset stats when the person changes
-        if person != point.person:
-            person = point.person
-            points_sum = 0
-            categories = {9}
-            needed_upgrade = False
-
-        # Here's the goofy category change logic
-        if needed_upgrade and min(point.categories) == max(categories) - 1:
-            upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(categories) - 1, points_sum))
-            points_sum = 0
-            needed_upgrade = False
-            categories = {max(categories) - 1}
-        elif not categories.intersection(point.categories) and min(categories) > min(point.categories):
-            if categories == {9}:
-                categories = set(point.categories)
-            elif can_upgrade(event_type, points_sum, max(point.categories)):
-                    upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(point.categories), points_sum))
-                    points_sum = 0
-                    needed_upgrade = False
-                    categories = {max(point.categories)}
-            else:
-                upgrade_notes.append('NO POINTS FOR RACING ABOVE CATEGORY')
-                point.points = 0
-        elif not categories.intersection(point.categories) and max(categories) < max(point.categories):
-            upgrade_notes.append('NO POINTS FOR RACING BELOW CATEGORY')
-            point.points = 0
-        elif len(categories.intersection(point.categories)) == 1 and len(categories) > 1:
-            categories.intersection_update(point.categories)
-
-        points_sum += point.points
-
-        if needs_upgrade(point.person, event_type, points_sum, categories):
-            upgrade_notes.append('NEEDS UPGRADE')
-            point.needs_upgrade = True
-            needed_upgrade = True
-
-        point.sum_categories = list(categories)
-        point.sum_points = points_sum
-        point.sum_notes = '; '.join(upgrade_notes)
-        point.save()
-
-
-def print_points(event_type, output_format):
     """
-    Print out points tally for each Person
+    Calculate running points totals and detect upgrades
     Note that this is hardcoded to give a point-in-time result from the date the script is run.
     Attempts to do some guessing at category and upgrades based on race participation
     and acrued points, but there's a potential to get it wrong. It'd be nice if the site
     tracked historical rider categories, but all you get is a point in time snapshot at
     the time the data is retrieved.
     """
+    results = (Result.select(Result.id,
+                             Result.place,
+                             Person,
+                             Race.id,
+                             Race.name,
+                             Race.date,
+                             Race.categories,
+                             Event.id,
+                             Event.name)
+                     .join(Person)
+                     .switch(Result)
+                     .join(Race)
+                     .join(Event)
+                     .where(Event.type == event_type)
+                     .where(fn.LENGTH(Person.last_name) > 1)
+                     .order_by(Person.last_name.collate('NOCASE').asc(),
+                               Person.first_name.collate('NOCASE').asc(),
+                               Race.date.asc()))
+
+    person = None
+    points_sum = 0
+    categories = {9}
+    needed_upgrade = False
+
+    for result in prefetch(results, Points):
+        upgrade_notes = []
+
+        # Print a sum and reset stats when the person changes
+        if person != result.person:
+            person = result.person
+            points_sum = 0
+            categories = {9}
+            needed_upgrade = False
+
+        if not result.race.categories:
+            logger.info('{0}, {1}: {2} points for {3} in {4}'.format(
+                result.person.last_name,
+                result.person.first_name,
+                '-',
+                result.place,
+                result.race.name))
+            continue
+
+        # Here's the goofy category change logic
+        if needed_upgrade and min(result.race.categories) == max(categories) - 1:
+            upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(categories) - 1, points_sum))
+            points_sum = 0
+            needed_upgrade = False
+            categories = {max(categories) - 1}
+        elif not categories.intersection(result.race.categories) and min(categories) > min(result.race.categories):
+            if categories == {9}:
+                categories = set(result.race.categories)
+            elif can_upgrade(event_type, points_sum, max(result.race.categories)):
+                    upgrade_notes.append('UPGRADED TO {} AFTER {} POINTS'.format(max(result.race.categories), points_sum))
+                    points_sum = 0
+                    needed_upgrade = False
+                    categories = {max(result.race.categories)}
+            else:
+                upgrade_notes.append('NO POINTS FOR RACING ABOVE CATEGORY')
+                if result.points:
+                    result.points[0].value = 0
+        elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
+            upgrade_notes.append('NO POINTS FOR RACING BELOW CATEGORY')
+            if result.points:
+                result.points[0].value = 0
+        elif len(categories.intersection(result.race.categories)) == 1 and len(categories) > 1:
+            categories.intersection_update(result.race.categories)
+
+        if result.points:
+            points_sum += result.points[0].value
+
+            if needs_upgrade(result.person, event_type, points_sum, categories):
+                upgrade_notes.append('NEEDS UPGRADE')
+                result.points[0].needs_upgrade = True
+                needed_upgrade = True
+
+            result.points[0].sum_categories = list(categories)
+            result.points[0].sum_value = points_sum
+            result.points[0].sum_notes = '; '.join(upgrade_notes)
+            result.points[0].save()
+
+        logger.info('{0}, {1}: {2} points for {3} in {4} race at {5}'.format(
+            result.person.last_name,
+            result.person.first_name,
+            result.points[0].value if result.points else '-',
+            result.place,
+            '/'.join(str(c) for c in result.race.categories),
+            '/'.join(str(c) for c in categories)))
+
+
+def print_points(event_type, output_format):
+    """
+    Print out points tally for each Person
+    """
     start_date = datetime.now() - timedelta(days=395)
 
-    latest_points = (Points.select(Points,
-                                   Person.id,
-                                   Person.first_name,
-                                   Person.last_name,
-                                   fn.MAX(Race.date).alias('last_date'))
-                           .join(Person)
-                           .switch(Points)
-                           .join(Race)
-                           .group_by(Person.id)
-                           .having(Points.needs_upgrade == True)
-                           .order_by(Points.sum_categories.asc(),
-                                     Points.sum_points.desc(),
-                                     Person.last_name.collate('NOCASE').asc(),
-                                     Person.first_name.collate('NOCASE').asc()))
+    upgrades_needed = (Points.select(Points,
+                                     Result.place,
+                                     Person.id,
+                                     Person.first_name,
+                                     Person.last_name,
+                                     fn.MAX(Race.date).alias('last_date'))
+                             .join(Result)
+                             .join(Person)
+                             .switch(Result)
+                             .join(Race)
+                             .join(Event)
+                             .where(Event.type == event_type)
+                             .where(fn.LENGTH(Person.last_name) > 1)
+                             .group_by(Person.id)
+                             .having(Points.needs_upgrade == True)
+                             .order_by(Points.sum_categories.asc(),
+                                       Points.sum_value.desc(),
+                                       Person.last_name.collate('NOCASE').asc(),
+                                       Person.first_name.collate('NOCASE').asc()))
 
-    query = (Points.select(Points,
-                           Person,
-                           Race.id,
-                           Race.name,
-                           Race.date,
-                           Event.id,
-                           Event.name)
-                   .join(Person)
-                   .switch(Points)
-                   .join(Race)
-                   .join(Event)
-                   .where(Event.type == event_type)
-                   .where(Race.date >= start_date)
-                   .where(fn.LENGTH(Person.last_name) > 1)
-                   .order_by(Person.last_name.collate('NOCASE').asc(),
-                             Person.first_name.collate('NOCASE').asc(),
-                             Race.date.asc()))
+    points = (Points.select(Points,
+                            Result,
+                            Person,
+                            Race.id,
+                            Race.name,
+                            Race.date,
+                            Race.categories,
+                            Event.id,
+                            Event.name)
+                    .join(Result)
+                    .join(Person)
+                    .switch(Result)
+                    .join(Race)
+                    .join(Event)
+                    .where(Event.type == event_type)
+                    .where(fn.LENGTH(Person.last_name) > 1)
+                    .order_by(Person.last_name.collate('NOCASE').asc(),
+                              Person.first_name.collate('NOCASE').asc(),
+                              Race.date.asc()))
 
     person = None
     with get_writer(output_format, event_type, start_date) as writer:
 
         writer.start_upgrades()
-        for point in latest_points.execute():
+        for point in upgrades_needed.execute():
             # Confirm that they haven't already been upgraded on the site
-            obra = point.person.obra.get() if point.person.obra.count() else None
+            obra = point.result.person.obra.get() if point.result.person.obra.count() else None
             if not obra or obra.is_expired():
-                scrape_person(point.person)
-                obra = point.person.obra.get()
+                scrape_person(point.result.person)
+                obra = point.result.person.obra.get()
             if obra.category(event_type) >= min(point.sum_categories):
                 writer.upgrade(point)
         writer.end_upgrades()
 
-        for point in query.execute():
-            if person != point.person:
+        for point in points.execute():
+            if person != point.result.person:
                 if person:
                     writer.end_person(person)
-                writer.start_person(point.person)
-                person = point.person
+                person = point.result.person
+                writer.start_person(person)
             writer.point(point)
         else:
             writer.end_person(person, True)
-
-
-def get_categories(race):
-    """
-    Extract a category list from the race name
-    """
-    # FIXME - need to handle pro/elite (cat 0) for MTB
-    match = re.search(CATEGORY_RE, race.name)
-    if match:
-        cats = match.group(0)
-        if cats.lower() == 'beginner':
-            cats = '4/5'
-        return [int(c) for c in cats.split('/')]
-    else:
-        return []
 
 
 def get_points_schedule(event_type, race):
@@ -266,7 +280,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
     Determine if the rider needs an upgrade
     """
     is_cat_1 = False
-    if categories == {1,2}:
+    if categories == {1, 2}:
         obra = person.obra.get() if person.obra.count() else None
         if not obra or obra.is_expired():
             scrape_person(person)
@@ -276,7 +290,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
     # FIXME - need to handle pro/elite (cat 0) for MTB
     if categories == {1} or is_cat_1:
         return False
-    elif 2 in categories and not 3 in categories:
+    elif 2 in categories and 3 not in categories:
         return points_sum >= 35
     else:
         return points_sum >= 20

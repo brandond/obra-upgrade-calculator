@@ -1,7 +1,8 @@
 from __future__ import unicode_literals
-from textwrap import dedent
-from datetime import datetime
+
 import io
+from datetime import datetime
+from textwrap import dedent
 
 HTML_HEADER = '''
     <!DOCTYPE html>
@@ -43,9 +44,13 @@ HTML_UPGRADES_HEADER = '''
 HTML_UPGRADE = '''
     <!-- Upgrade -->
                 <tr>
-                  <td class="race">{1}</td>
-                  <td class="race"><a href="#person_{0.person.id}">{0.person.first_name} {0.person.last_name}</td>
-                  <td class="points_total">{0.sum_points}</td>
+                  <td class="race">{sum_categories}</td>
+                  <td class="race">
+                    <a href="#person_{point.result.person.id}">
+                        {point.result.person.first_name} {point.result.person.last_name}
+                      </a>
+                  </td>
+                  <td class="points_total">{point.sum_value}</td>
                 </tr>'''
 
 HTML_UPGRADES_FOOTER = '''
@@ -75,14 +80,18 @@ HTML_PERSON_HEADER = '''
 HTML_POINT = '''
     <!-- Point -->
               <tr>
-                <td class="place">{0.place}</td>
-                <td class="points hidden-xs">{0.points}</td>
-                <td class="points_total">{1}</td>
-                <td class="event"><a href="https://obra.org/events/{0.race.event.id}/results#race_{0.race.id}">{0.race.event.name}</a></td>
-                <td class="category">{0.race.name}</td>
-                <td class="place">{2}</td>
-                <td class="date hidden-xs">{0.race.date}</td>
-                <td class="notes text-nowrap">{3}</td>
+                <td class="place">{point.result.place}</td>
+                <td class="points hidden-xs">{point.value}</td>
+                <td class="points_total">{point.sum_value}</td>
+                <td class="event">
+                  <a href="https://obra.org/events/{point.result.race.event.id}/results#race_{point.result.race.id}">
+                    {point.result.race.event.name}
+                  </a>
+                </td>
+                <td class="category">{point.result.race.name}</td>
+                <td class="place">{sum_categories}</td>
+                <td class="date hidden-xs">{point.result.race.date}</td>
+                <td class="notes text-nowrap">{point.sum_notes}</td>
               </tr>'''
 
 HTML_PERSON_FOOTER = '''
@@ -120,7 +129,7 @@ class OutputBase(object):
         """Called at the start of the Upgrades block"""
         pass
 
-    def upgrade(self, upgrade):
+    def upgrade(self, point):
         """Called to print a single person who needs an upgrade"""
         pass
 
@@ -146,24 +155,25 @@ class OutputBase(object):
         return None
 
 
-
 class TextOutput(OutputBase):
     def header(self):
         self.output.write('--- Upgrade Points Earned In {} Races Since {} ---\n\n'.format(
             self.event_type.capitalize(), self.start_date.strftime('%Y-%m-%d')))
 
     def point(self, point):
-        self.output.write('{0:<24s} | {1:>2d} points in Cat {2:<3s} | {3:>2d} for {4:d}/{5:<2d} at {6}: {7} on {8}  {9}\n'.format(
-            ', '.join([point.person.last_name, point.person.first_name]),
-            point.sum_points,
+        if point.sum_notes:
+            point.sum_notes = '*** {} ***'.format(point.sum_notes)
+        self.output.write('{0:<24s} | {1:>2d} points in Cat {2:<3s} | {3:>2d} for {4}/{5:<2d} at {6}: {7} on {8}  {9}\n'.format(
+            ', '.join([point.result.person.last_name, point.result.person.first_name]),
+            point.sum_value,
             '/'.join(str(c) for c in point.sum_categories),
-            point.points,
-            point.place,
+            point.value,
+            point.result.place,
             point.starters,
-            point.race.event.name,
-            point.race.name,
-            point.race.date,
-            '*** ' + point.sum_notes + ' ***' if point.sum_notes else ''))
+            point.result.race.event.name,
+            point.result.race.name,
+            point.result.race.date,
+            point.sum_notes))
 
 
 class HtmlOutput(OutputBase):
@@ -173,8 +183,10 @@ class HtmlOutput(OutputBase):
     def start_upgrades(self):
         self.output.write(dedent(HTML_UPGRADES_HEADER))
 
-    def upgrade(self, upgrade):
-        self.output.write(dedent(HTML_UPGRADE).format(upgrade, '/'.join(str(c) for c in upgrade.sum_categories)))
+    def upgrade(self, point):
+        self.output.write(dedent(HTML_UPGRADE).format(
+            point=point,
+            sum_categories='/'.join(str(c) for c in point.sum_categories)))
 
     def end_upgrades(self):
         self.output.write(dedent(HTML_UPGRADES_FOOTER))
@@ -183,7 +195,9 @@ class HtmlOutput(OutputBase):
         self.output.write(dedent(HTML_PERSON_HEADER).format(person))
 
     def point(self, point):
-        self.output.write(dedent(HTML_POINT).format(point, point.sum_points, '/'.join(str(c) for c in point.sum_categories), point.sum_notes))
+        self.output.write(dedent(HTML_POINT).format(
+            point=point,
+            sum_categories='/'.join(str(c) for c in point.sum_categories)))
 
     def end_person(self, person, final=False):
         self.output.write(dedent(HTML_PERSON_FOOTER))
@@ -212,9 +226,16 @@ class JsonOutput(OutputBase):
 
         self.point_buffer = '        { '
         self.point_buffer += '"place": {}, "starters": {}, "points": {}, "point_total": {}, '.format(
-            point.place, point.starters, point.points, point.sum_points)
+            point.result.place,
+            point.starters,
+            point.value,
+            point.sum_value)
         self.point_buffer += '"category": "{}", "event": "{}", "race": "{}", "date": "{}", "notes": "{}" '.format(
-            '/'.join(str(c) for c in point.sum_categories), point.race.event.name, point.race.name, point.race.date, point.sum_notes)
+            '/'.join(str(c) for c in point.sum_categories),
+            point.result.race.event.name,
+            point.result.race.name,
+            point.result.race.date,
+            point.sum_notes)
         self.point_buffer += '}'
 
     def end_person(self, person, final=False):
@@ -232,25 +253,25 @@ class CsvOutput(OutputBase):
         self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
 
     def point(self, point):
-        self.output.write('{0:>1d},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
-            point.place,
+        self.output.write('{0},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
+            point.result.place,
             point.starters,
-            point.points,
-            point.sum_points,
-            point.person.first_name,
-            point.person.last_name,
+            point.value,
+            point.sum_value,
+            point.result.person.first_name,
+            point.result.person.last_name,
             '/'.join(str(c) for c in point.sum_categories),
-            point.race.event.name,
-            point.race.name,
-            point.race.date,
+            point.result.race.event.name,
+            point.result.race.name,
+            point.result.race.date,
             point.sum_notes))
 
-type_map = {
-    'text': TextOutput,
-    'html': HtmlOutput,
-    'json': JsonOutput,
-    'csv': CsvOutput,
-    }
+
+type_map = {'text': TextOutput,
+            'html': HtmlOutput,
+            'json': JsonOutput,
+            'csv': CsvOutput,
+            }
 
 
 def get_writer(output_format, *args, **kwargs):

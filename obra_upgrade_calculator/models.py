@@ -1,9 +1,9 @@
 
 import logging
-from os.path import expanduser
 from datetime import datetime, timedelta
+from os.path import expanduser
 
-from peewee import Model, BooleanField
+from peewee import BooleanField, Model
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
                                 DateTimeField, ForeignKeyField, IntegerField)
 from playhouse.sqlite_ext import JSONField
@@ -48,6 +48,7 @@ class Race(Model):
     id = IntegerField(verbose_name='Race ID', primary_key=True)
     name = CharField(verbose_name='Race Name')
     date = DateField(verbose_name='Race Date')
+    categories = JSONField(verbose_name='Race Categories')
     created = DateTimeField(verbose_name='Results Created')
     updated = DateTimeField(verbose_name='Results Updated')
     event = ForeignKeyField(verbose_name='Race Event', model=Event, backref='races')
@@ -103,23 +104,17 @@ class Result(Model):
 
 
 class Points(Model):
-    person = ForeignKeyField(verbose_name='Points Person', model=Person, null=True)
-    race = ForeignKeyField(verbose_name='Points from Race', model=Race)
-    categories = JSONField(verbose_name='Point in Categories')
-    place = IntegerField(verbose_name='Place')
+    result = ForeignKeyField(verbose_name='Points from Result', model=Result, backref='points', primary_key=True)
     starters = IntegerField(verbose_name='Starting Field Size')
-    points = IntegerField(verbose_name='Points for Place')
+    value = IntegerField(verbose_name='Points for Place')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
-    sum_points = IntegerField(verbose_name='Current Points', null=True)
-    sum_categories = JSONField(verbose_name='Current Category', null=True)
-    sum_notes = CharField(verbose_name='Current Notes', null=True)
+    sum_value = IntegerField(verbose_name='Current Points', default=0)
+    sum_categories = JSONField(verbose_name='Current Category', default=[])
+    sum_notes = CharField(verbose_name='Current Notes', default='')
 
     class Meta:
         database = db
         only_save_dirty = True
-        indexes = (
-            (('person', 'race'), True),
-        )
 
 
 db.connect()
