@@ -78,11 +78,14 @@ def recalculate_points(event_type):
                                    .where(Result.place.cast('integer') <= len(points))
                                    .order_by(Result.place.cast('integer').asc()))
             for result in results.execute():
-                logger.info('{}, {}: {} points for {}'.format(
+                logger.info('{}, {}: {} points for {} in {} at {}: {}'.format(
                     result.person.last_name,
                     result.person.first_name,
                     points[result.zplace],
-                    result.place))
+                    result.place,
+                    '/'.join(str(c) for c in race.categories),
+                    race.event.name,
+                    race.name))
                 (Points.insert(result=result,
                                starters=race.result_count,
                                value=points[result.zplace])
@@ -135,12 +138,15 @@ def sum_points(event_type, strict_upgrades=False):
             upgrade_notes.clear()
 
         if not result.race.categories:
-            logger.info('{0}, {1}: {2} points for {3} in {4}'.format(
+            logger.info('{0}, {1}: {2} points for {3} at {4}: {5} ({6} in {7})'.format(
                 result.person.last_name,
                 result.person.first_name,
                 '-',
                 result.place,
-                result.race.name))
+                result.race.event.name,
+                result.race.name,
+                '/'.join(str(c) for c in categories),
+                '-'))
             continue
 
         upgrade_category = max(categories) - 1
@@ -173,7 +179,7 @@ def sum_points(event_type, strict_upgrades=False):
             if result.points:
                 upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                 result.points[0].value = 0
-        elif len(categories.intersection(result.race.categories)) == 1 and len(categories) > 1:
+        elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
 
@@ -191,13 +197,15 @@ def sum_points(event_type, strict_upgrades=False):
             result.points[0].save()
             upgrade_notes.clear()
 
-        logger.info('{0}, {1}: {2} points for {3} in {4} race at {5}'.format(
+        logger.info('{0}, {1}: {2} points for {3} at {4}: {5} ({6} in {7})'.format(
             result.person.last_name,
             result.person.first_name,
             result.points[0].value if result.points else '-',
             result.place,
-            '/'.join(str(c) for c in result.race.categories),
-            '/'.join(str(c) for c in categories)))
+            result.race.event.name,
+            result.race.name,
+            '/'.join(str(c) for c in categories),
+            '/'.join(str(c) for c in result.race.categories)))
 
 
 def print_points(event_type, output_format):

@@ -10,7 +10,7 @@ from .models import Event, ObraPerson, Person, Race, Result, Series
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
-CATEGORY_RE = re.compile(r'(beginner|\d(/\d)+|\d)(?!\d?\+)', flags=re.I)
+CATEGORY_RE = re.compile(r'(?:^| )(beginner|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
 
 
 def scrape_year(year, event_type):
@@ -208,7 +208,7 @@ def get_categories(race_name):
     # FIXME - need to handle pro/elite (cat 0) for MTB
     match = re.search(CATEGORY_RE, race_name)
     if match:
-        cats = match.group(0)
+        cats = match.group(1)
         if cats.lower() == 'beginner':
             cats = '4/5'
         return [int(c) for c in cats.split('/')]
