@@ -156,7 +156,10 @@ def sum_points(event_type, strict_upgrades=False):
         # Here's the goofy category change logic
         if strict_upgrades and needed_upgrade and upgrade_category in result.race.categories:
             # Needed an upgrade, and is racing in the new category - grant it
-            upgrade_notes.add('UPGRADED TO {} AFTER {} POINTS'.format(upgrade_category, points_sum))
+            upgrade_note = 'UPGRADED TO {} AFTER {} POINTS'.format(upgrade_category, points_sum)
+            if not result.points:
+                upgrade_note += ' ON {}'.format(result.race.date)
+            upgrade_notes.add(upgrade_note)
             points_sum = 0
             needed_upgrade = False
             categories = {upgrade_category}
@@ -167,7 +170,10 @@ def sum_points(event_type, strict_upgrades=False):
                 categories = set(result.race.categories)
             elif can_upgrade(event_type, points_sum, max(result.race.categories)):
                 # Has enough points to upgrade to this category, grant it
-                upgrade_notes.add('UPGRADED TO {} AFTER {} POINTS'.format(max(result.race.categories), points_sum))
+                upgrade_note = 'UPGRADED TO {} AFTER {} POINTS'.format(max(result.race.categories), points_sum)
+                if not result.points:
+                    upgrade_note += ' ON {}'.format(result.race.date)
+                upgrade_notes.add(upgrade_note)
                 points_sum = 0
                 needed_upgrade = False
                 categories = {max(result.race.categories)}
