@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 import logging
 from datetime import datetime
 
@@ -24,6 +27,7 @@ def cli(type, format, scrape, strict, debug):
     if scrape:
         # Scrape last two years of results
         year = datetime.now().year
+        scrape_year(year - 2, type)
         scrape_year(year - 1, type)
         scrape_year(year, type)
 
