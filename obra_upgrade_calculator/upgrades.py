@@ -195,7 +195,7 @@ def sum_points(event_type, strict_upgrades=False):
 
             result.points[0].sum_categories = list(categories)
             result.points[0].sum_value = points_sum
-            result.points[0].sum_notes = '; '.join(reversed(list(upgrade_notes)))
+            result.points[0].sum_notes = '; '.join(reversed(sorted(upgrade_notes)))
             result.points[0].save()
             upgrade_notes.clear()
 
