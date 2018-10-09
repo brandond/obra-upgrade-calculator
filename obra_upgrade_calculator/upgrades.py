@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import re
 import logging
 from datetime import datetime, timedelta
 
@@ -44,14 +45,9 @@ def recalculate_points(event_type):
            .execute())
 
     # Get all races in the last year with a minimum number of starters, filtering out non-eligible fields
-    # TODO: Make race name filter more portable to non-CX events
     query = (Race.select(Race, Event, fn.COUNT(Result.id).alias('result_count'))
                  .where(Event.type == event_type)
-                 .where(~(Race.name.contains('junior')))
-                 .where(~(Race.name.contains('athena')))
-                 .where(~(Race.name.contains('clyde')))
-                 .where(~(Race.name.contains('stampede')))
-                 .where(~(Race.name.contains('single')))
+                 .where(Race.categories.length() > 0)
                  .where(~(Result.place.contains('dns')))
                  .where(Race.date >= start_date)
                  .join(Event)
@@ -292,7 +288,7 @@ def get_points_schedule(event_type, race):
     Get the points shedule for the race's gender and starter count
     See: http://www.obra.org/upgrade_rules.html
     """
-    field = 'women' if 'women' in race.name.lower() else 'open'
+    field = 'women' if re.match('women|junior', race.name, re.I) else 'open'
 
     if event_type in SCHEDULE:
         for tier in SCHEDULE[event_type][field]:
