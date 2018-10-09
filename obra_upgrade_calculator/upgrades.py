@@ -288,7 +288,7 @@ def get_points_schedule(event_type, race):
     Get the points shedule for the race's gender and starter count
     See: http://www.obra.org/upgrade_rules.html
     """
-    field = 'women' if re.match('women|junior', race.name, re.I) else 'open'
+    field = 'women' if re.search('women|junior', race.name, re.I) else 'open'
 
     if event_type in SCHEDULE:
         for tier in SCHEDULE[event_type][field]:
