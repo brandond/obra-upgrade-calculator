@@ -220,7 +220,7 @@ def get_categories(race_name):
         elif cats.lower() == 'b':
             cats = '3'
         elif cats.lower() == 'a':
-           cats = '1/2'
+            cats = '1/2'
         return [int(c) for c in cats.split('/')]
     else:
         return []

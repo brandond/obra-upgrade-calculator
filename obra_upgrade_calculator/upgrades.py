@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import re
 import logging
-from datetime import datetime, timedelta
 from collections import namedtuple
 
 from peewee import JOIN, fn, prefetch
@@ -215,8 +214,6 @@ def print_points(event_type, output_format):
     """
     Print out points tally for each Person
     """
-    start_date = datetime.now() - timedelta(days=365)
-
     upgrades_needed = (Points.select(Points,
                                      Result.place,
                                      Person.id,
@@ -252,14 +249,13 @@ def print_points(event_type, output_format):
                     .join(Race)
                     .join(Event)
                     .where(Event.type == event_type)
-                    .where(Race.date >= start_date)
                     .where(fn.LENGTH(Person.last_name) > 1)
                     .order_by(Person.last_name.collate('NOCASE').asc(),
                               Person.first_name.collate('NOCASE').asc(),
                               Race.date.asc()))
 
     person = None
-    with get_writer(output_format, event_type, start_date) as writer:
+    with get_writer(output_format, event_type) as writer:
 
         writer.start_upgrades()
         for point in upgrades_needed.execute():

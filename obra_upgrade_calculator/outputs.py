@@ -11,7 +11,7 @@ HTML_HEADER = '''
     <html lang="en">
     <head>
         <meta charset="utf-8">
-        <title>OBRA: Upgrade Points for {0} since {1}</title>
+        <title>OBRA: Upgrade Points for {0}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <link rel="stylesheet" media="all" href="https://obra.org/assets/application-367cae7561f3a791ddfdc0fe0224815ed8c86991ffa918002134a4b834ed8de7.css" />
         <link rel="stylesheet" media="screen" href="https://obra.org/assets/registration_engine/application-dbd90166764121e1ddeaf5c3adc56246b6fb9da8bf6e25e2656046d867bd8a4d.css" />
@@ -23,7 +23,6 @@ HTML_HEADER = '''
         <div class="content">
           <h2>Upgrade Points for {0}</h2>
           <div class="row event_info">
-            Points Earned Since {1}<br>
             <a href="upgrades.csv">Download Raw CSV</a>
           </div>
           <p class="created_updated">Updated {2}</p>
@@ -117,9 +116,8 @@ HTML_FOOTER = '''
 
 
 class OutputBase(object):
-    def __init__(self, event_type, start_date, path='/dev/stdout'):
+    def __init__(self, event_type, path='/dev/stdout'):
         self.event_type = event_type
-        self.start_date = start_date
         self.output = io.TextIOWrapper(io.open(path, 'wb'))
 
     def __enter__(self):
@@ -159,8 +157,8 @@ class OutputBase(object):
 
 class TextOutput(OutputBase):
     def header(self):
-        self.output.write('--- Upgrade Points Earned In {} Races Since {} ---\n\n'.format(
-            self.event_type.capitalize(), self.start_date.strftime('%Y-%m-%d')))
+        self.output.write('--- Upgrade Points for {} ---\n\n'.format(
+            self.event_type.capitalize()))
 
     def point(self, point):
         if point.sum_notes:
@@ -184,7 +182,7 @@ class TextOutput(OutputBase):
 
 class HtmlOutput(OutputBase):
     def header(self):
-        self.output.write(dedent(HTML_HEADER).format(self.event_type.capitalize(), self.start_date.strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.output.write(dedent(HTML_HEADER).format(self.event_type.capitalize(), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
     def start_upgrades(self):
         self.output.write(dedent(HTML_UPGRADES_HEADER))
@@ -216,7 +214,6 @@ class JsonOutput(OutputBase):
     def header(self):
         self.output.write('{\n')
         self.output.write('  "event_type": "{}",\n'.format(self.event_type))
-        self.output.write('  "start_date": "{}",\n'.format(self.start_date))
         self.output.write('  "people": [\n')
 
     def start_person(self, person):
