@@ -18,18 +18,17 @@ from .outputs import type_map
 @click.option('--debug/--no-debug', default=False)
 def cli(type, format, scrape, strict, debug):
     log_level = 'DEBUG' if debug else 'INFO'
-    logging.basicConfig(level=log_level)
+    logging.basicConfig(level=log_level, format='%(levelname)s:%(module)s.%(funcName)s:%(message)s')
 
     # Import these after setting up logging otherwise we don't get logs
     from .scrapers import scrape_year, scrape_new, scrape_recent
     from .upgrades import recalculate_points, print_points, sum_points
 
     if scrape:
-        # Scrape last two years of results
-        year = datetime.now().year
-        scrape_year(year - 2, type)
-        scrape_year(year - 1, type)
-        scrape_year(year, type)
+        # Scrape last 5 years of results
+        cur_year = datetime.now().year
+        for year in range(cur_year - 4, cur_year + 1):
+            scrape_year(year, type)
 
         # Load in anything new
         scrape_new()
@@ -37,9 +36,9 @@ def cli(type, format, scrape, strict, debug):
         # Check for updates to anything touched in the last three days
         scrape_recent(3)
 
-        # Calculate points from new data
-        recalculate_points(type)
-        sum_points(type, strict)
+    # Calculate points from new data
+    recalculate_points(type)
+    sum_points(type, strict)
 
     # Finally, output data
     print_points(type, format)
