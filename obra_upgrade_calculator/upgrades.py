@@ -252,7 +252,7 @@ def print_points(event_type, output_format):
                     .join(Race)
                     .join(Event)
                     .where(Event.type == event_type)
-                    .where(Event.date >= start_date)
+                    .where(Race.date >= start_date)
                     .where(fn.LENGTH(Person.last_name) > 1)
                     .order_by(Person.last_name.collate('NOCASE').asc(),
                               Person.first_name.collate('NOCASE').asc(),
