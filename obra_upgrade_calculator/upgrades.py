@@ -14,6 +14,7 @@ from .scrapers import scrape_person
 
 logger = logging.getLogger(__name__)
 Point = namedtuple('Point', 'value,date')
+NAME_RE = re.compile("^[a-z.'-]+", flags=re.I)
 SCHEDULE = {
     'cyclocross': {
         'open': [
@@ -75,6 +76,9 @@ def recalculate_points(event_type):
                                    .where(Result.place.cast('integer') <= len(points))
                                    .order_by(Result.place.cast('integer').asc()))
             for result in results.execute():
+                if not (NAME_RE.match(result.person.first_name) and NAME_RE.match(result.person.last_name)):
+                    logger.debug('Invalid name: {} {}'.format(result.person.first_name, result.person.last_name))
+                    continue
                 logger.info('{}, {}: {} points for {} in {} at {}: {}'.format(
                     result.person.last_name,
                     result.person.first_name,
@@ -113,8 +117,6 @@ def sum_points(event_type, strict_upgrades=False):
                      .join(Race)
                      .join(Event)
                      .where(Event.type == event_type)
-                     .where(Person.first_name.regexp("^[A-Za-z'-]{2,}"))
-                     .where(Person.last_name.regexp("^[A-Za-z'-]{2,}"))
                      .order_by(Person.last_name.collate('NOCASE').asc(),
                                Person.first_name.collate('NOCASE').asc(),
                                Race.date.asc()))
@@ -227,7 +229,6 @@ def print_points(event_type, output_format):
                              .join(Race)
                              .join(Event)
                              .where(Event.type == event_type)
-                             .where(fn.LENGTH(Person.last_name) > 1)
                              .group_by(Person.id)
                              .having(Points.needs_upgrade == True)
                              .order_by(Points.sum_categories.asc(),

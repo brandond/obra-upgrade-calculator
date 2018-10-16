@@ -13,7 +13,6 @@ from playhouse.sqlite_ext import JSONField
 
 logger = logging.getLogger(__name__)
 db = APSWDatabase(expanduser('~/.obra.sqlite3'),
-                  regexp_function=True,
                   pragmas=(('foreign_keys', 'on'),
                            ('page_size', 1024 * 4),
                            ('cache_size', 10000),
