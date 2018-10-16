@@ -14,7 +14,7 @@ from .models import Event, ObraPerson, Person, Race, Result, Series
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
-CATEGORY_RE = re.compile(r'(?:^| )(beginner|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
+CATEGORY_RE = re.compile(r'(?:^| )(beginner|[a-c]|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
 
 
 def scrape_year(year, event_type):
@@ -214,7 +214,13 @@ def get_categories(race_name):
     if match:
         cats = match.group(1)
         if cats.lower() == 'beginner':
-            cats = '4/5'
+            cats = '5'
+        elif cats.lower() == 'c':
+            cats = '4'
+        elif cats.lower() == 'b':
+            cats = '3'
+        elif cats.lower() == 'a':
+           cats = '1/2'
         return [int(c) for c in cats.split('/')]
     else:
         return []
