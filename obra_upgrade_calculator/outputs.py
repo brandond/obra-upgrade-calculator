@@ -25,7 +25,7 @@ HTML_HEADER = '''
           <div class="row event_info">
             <a href="upgrades.csv">Download Raw CSV</a>
           </div>
-          <p class="created_updated">Updated {2}</p>
+          <p class="created_updated">Updated {1}</p>
     <!-- Start Content -->'''
 
 HTML_UPGRADES_HEADER = '''
@@ -62,7 +62,7 @@ HTML_UPGRADES_FOOTER = '''
 
 HTML_PERSON_HEADER = '''
     <!-- Start Person -->
-          <h3 class="race" id="person_{0.id}"><a href="https://obra.org/people/{0.id}">{0.first_name} {0.last_name}</a></h3>
+          <h3 class="race" id="person_{0.id}"><a href="#person_{0.id}">{0.first_name} {0.last_name}</a></h3>
           <table class="base table table-striped results">
             <thead>
               <tr>

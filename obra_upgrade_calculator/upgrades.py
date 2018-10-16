@@ -113,7 +113,8 @@ def sum_points(event_type, strict_upgrades=False):
                      .join(Race)
                      .join(Event)
                      .where(Event.type == event_type)
-                     .where(fn.LENGTH(Person.last_name) > 1)
+                     .where(Person.first_name.regexp("^[A-Za-z'-]{2,}"))
+                     .where(Person.last_name.regexp("^[A-Za-z'-]{2,}"))
                      .order_by(Person.last_name.collate('NOCASE').asc(),
                                Person.first_name.collate('NOCASE').asc(),
                                Race.date.asc()))
