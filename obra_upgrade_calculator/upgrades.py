@@ -34,7 +34,7 @@ SCHEDULE = {
 
 def recalculate_points(event_type):
     """
-    Recalculate points totals for all races of this type.
+    Create Points for qualifying Results for all Races of this type.
     """
 
     # Remove any previously calculated points for this event type
@@ -95,7 +95,6 @@ def recalculate_points(event_type):
 def sum_points(event_type, strict_upgrades=False):
     """
     Calculate running points totals and detect upgrades
-    Note that this is hardcoded to give a point-in-time result from the date the script is run.
     Attempts to do some guessing at category and upgrades based on race participation
     and acrued points, but there's a potential to get it wrong. It'd be nice if the site
     tracked historical rider categories, but all you get is a point in time snapshot at
@@ -320,6 +319,9 @@ def needs_upgrade(person, event_type, points_sum, categories):
 
 
 def can_upgrade(event_type, points_sum, category):
+    """
+    Determine if the rider is allowed to upgrade to a given category, based on their current points
+    """
     if category == 1:
         return points_sum >= 35
     elif category == 2:
@@ -329,4 +331,7 @@ def can_upgrade(event_type, points_sum, category):
 
 
 def points_sum(points, race_date):
+    """
+    Calculate a sum of points earned within the last year
+    """
     return sum(p.value for p in points if (race_date - p.date).days <= 365)
