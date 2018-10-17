@@ -151,6 +151,7 @@ def sum_points(event_type, strict_upgrades=False):
             continue
 
         upgrade_category = max(categories) - 1
+        had_points = had_points or bool(cat_points)
 
         # Here's the goofy category change logic
         if strict_upgrades and needed_upgrade and upgrade_category in result.race.categories:
@@ -189,8 +190,6 @@ def sum_points(event_type, strict_upgrades=False):
         elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
-
-        had_points = had_points or bool(cat_points)
 
         if result.points:
             cat_points.append(Point(result.points[0].value, result.race.date))
