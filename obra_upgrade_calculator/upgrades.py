@@ -122,6 +122,7 @@ def sum_points(event_type, strict_upgrades=False):
                                Race.date.asc()))
 
     person = None
+    had_points = False
     cat_points = []
     categories = {9}
     needed_upgrade = False
@@ -131,6 +132,7 @@ def sum_points(event_type, strict_upgrades=False):
         # Print a sum and reset stats when the person changes
         if person != result.person:
             person = result.person
+            had_points = False
             cat_points = []
             categories = {9}
             needed_upgrade = False
@@ -154,8 +156,6 @@ def sum_points(event_type, strict_upgrades=False):
         if strict_upgrades and needed_upgrade and upgrade_category in result.race.categories:
             # Needed an upgrade, and is racing in the new category - grant it
             upgrade_note = 'UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date))
-            if not result.points:
-                upgrade_note += ' ON {}'.format(result.race.date)
             upgrade_notes.add(upgrade_note)
             cat_points = []
             needed_upgrade = False
@@ -172,8 +172,6 @@ def sum_points(event_type, strict_upgrades=False):
                 else:
                     upgrade_note = 'PREMATURELY '
                 upgrade_note += 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum(cat_points, result.race.date))
-                if not result.points:
-                    upgrade_note += ' ON {}'.format(result.race.date)
                 upgrade_notes.add(upgrade_note)
                 cat_points = []
                 needed_upgrade = False
@@ -183,17 +181,18 @@ def sum_points(event_type, strict_upgrades=False):
             if result.points:
                 upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                 result.points[0].value = 0
-            elif points_sum(cat_points, result.race.date) == 0:
-                # They don't have any points, probably nobody cares, give them a downgrade
+            elif not had_points:
+                # They've never had any points, probably nobody cares, give them a downgrade
                 categories = {min(result.race.categories)}
-                upgrade_notes.add('DOWNGRADED TO {} ON {}'.format(min(result.race.categories), result.race.date))
+                upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
         elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
 
+        had_points = had_points or bool(cat_points)
+
         if result.points:
             cat_points.append(Point(result.points[0].value, result.race.date))
-
             if needs_upgrade(result.person, event_type, points_sum(cat_points, result.race.date), categories):
                 upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
@@ -201,8 +200,14 @@ def sum_points(event_type, strict_upgrades=False):
 
             result.points[0].sum_categories = list(categories)
             result.points[0].sum_value = points_sum(cat_points, result.race.date)
-            result.points[0].sum_notes = '; '.join(reversed(sorted(upgrade_notes)))
             result.points[0].save()
+
+        if upgrade_notes:
+            if had_points and not result.points:
+                result.points = [Points.create(result=result, sum_categories=list(categories))]
+            if result.points:
+                result.points[0].notes = '; '.join(reversed(sorted(upgrade_notes)))
+                result.points[0].save()
             upgrade_notes.clear()
 
         logger.info('{0}, {1}: {2} points for {3} at {4}: {5} ({6} in {7})'.format(
@@ -335,4 +340,4 @@ def points_sum(points, race_date):
     """
     Calculate a sum of points earned within the last year (plus a one-week grace period)
     """
-    return sum(p.value for p in points if (race_date - p.date).days <= 372)
+    return sum(int(p.value) for p in points if (race_date - p.date).days <= 372)

@@ -108,12 +108,12 @@ class Result(Model):
 
 class Points(Model):
     result = ForeignKeyField(verbose_name='Points from Result', model=Result, backref='points', primary_key=True)
-    starters = IntegerField(verbose_name='Starting Field Size')
-    value = IntegerField(verbose_name='Points for Place')
+    starters = CharField(verbose_name='Starting Field Size', default='?')
+    value = CharField(verbose_name='Points for Place', default='0')
+    notes = CharField(verbose_name='Notes', default='')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
     sum_value = IntegerField(verbose_name='Current Points', default=0)
     sum_categories = JSONField(verbose_name='Current Category', default=[])
-    sum_notes = CharField(verbose_name='Current Notes', default='')
 
     class Meta:
         database = db

@@ -38,6 +38,7 @@ HTML_UPGRADES_HEADER = '''
                   <th class="race">Category</th>
                   <th class="race">Name</th>
                   <th class="points_total">Total Pts</th>
+                  <th class="date pull-right">Date</th>
                 </tr>
               </thead>
               <tbody>'''
@@ -52,6 +53,7 @@ HTML_UPGRADE = '''
                       </a>
                   </td>
                   <td class="points_total">{point.sum_value}</td>
+                  <td class="date">{point.last_date}</td>
                 </tr>'''
 
 HTML_UPGRADES_FOOTER = '''
@@ -92,7 +94,7 @@ HTML_POINT = '''
                 <td class="category">{point.result.race.name}</td>
                 <td class="place">{sum_categories}</td>
                 <td class="date hidden-xs">{point.result.race.date}</td>
-                <td class="notes text-nowrap">{point.sum_notes}</td>
+                <td class="notes text-nowrap">{point.notes}</td>
               </tr>'''
 
 HTML_PERSON_FOOTER = '''
@@ -161,9 +163,9 @@ class TextOutput(OutputBase):
             self.event_type.capitalize()))
 
     def point(self, point):
-        if point.sum_notes:
-            point.sum_notes = '*** {} ***'.format(point.sum_notes)
-        self.output.write('{0:<24s} | {1:>2d} points in Cat {2:<3s} | {3:>2d} for {4}/{5:<2d} at {6}: {7} on {8}  {9}\n'.format(
+        if point.notes:
+            point.notes = '*** {} ***'.format(point.notes)
+        self.output.write('{0:<24} | {1:>2} points in Cat {2:<3} | {3:>2} for {4}/{5:<2} at {6}: {7} on {8}  {9}\n'.format(
             ', '.join([point.result.person.last_name, point.result.person.first_name]),
             point.sum_value,
             '/'.join(str(c) for c in point.sum_categories),
@@ -173,7 +175,7 @@ class TextOutput(OutputBase):
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
-            point.sum_notes))
+            point.notes))
 
     def end_person(self, person, final=False):
         if not final:
@@ -238,7 +240,7 @@ class JsonOutput(OutputBase):
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
-            point.sum_notes)
+            point.notes)
         self.point_buffer += '}'
 
     def end_person(self, person, final=False):
@@ -256,7 +258,7 @@ class CsvOutput(OutputBase):
         self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
 
     def point(self, point):
-        self.output.write('{0},{1:>2d},{2:>2d},{3:>2d},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
+        self.output.write('{0},{1:>2s},{2:>2s},{3:>2s},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
             point.result.place,
             point.starters,
             point.value,
@@ -267,7 +269,7 @@ class CsvOutput(OutputBase):
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
-            point.sum_notes))
+            point.notes))
 
 
 type_map = {'text': TextOutput,
