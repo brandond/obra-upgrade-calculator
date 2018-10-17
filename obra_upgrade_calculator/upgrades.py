@@ -181,9 +181,19 @@ def sum_points(event_type, strict_upgrades=False):
                     result.points[0].value = 0
         elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
             # Race category does not overlap with rider category, and the race category is less skilled
-            if result.points:
-                upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
-                result.points[0].value = 0
+            # See if they've downgraded before we raise the alarm
+            obra = get_obra_data(result.person)
+            site_cat = obra.category(event_type)
+            if site_cat in result.race.categories:
+                categories = {site_cat}
+                upgrade_note = 'DOWNGRADED TO {}'.format(site_cat)
+                if not result.points:
+                    upgrade_note += ' ON {}'.format(result.race.date)
+                upgrade_notes.add(upgrade_note)
+            else:
+                if result.points:
+                    upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
+                    result.points[0].value = 0
         elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
@@ -262,10 +272,7 @@ def print_points(event_type, output_format):
         writer.start_upgrades()
         for point in upgrades_needed.execute():
             # Confirm that they haven't already been upgraded on the site
-            obra = point.result.person.obra.get() if point.result.person.obra.count() else None
-            if not obra or obra.is_expired():
-                scrape_person(point.result.person)
-                obra = point.result.person.obra.get()
+            obra = get_obra_data(point.result.person)
             if obra.category(event_type) >= min(point.sum_categories):
                 writer.upgrade(point)
         writer.end_upgrades()
@@ -301,10 +308,7 @@ def needs_upgrade(person, event_type, points_sum, categories):
     """
     is_cat_1 = False
     if categories == {1, 2}:
-        obra = person.obra.get() if person.obra.count() else None
-        if not obra or obra.is_expired():
-            scrape_person(person)
-            obra = person.obra.get()
+        obra = get_obra_data(person)
         is_cat_1 = obra.category(event_type) == 1
 
     # FIXME - need to handle pro/elite (cat 0) for MTB
@@ -326,6 +330,14 @@ def can_upgrade(event_type, points_sum, category):
         return points_sum >= 20
     else:
         return True
+
+
+def get_obra_data(person):
+    obra = person.obra.get() if person.obra.count() else None
+    if not obra or obra.is_expired():
+        scrape_person(person)
+        obra = person.obra.get()
+    return obra
 
 
 def points_sum(points, race_date):
