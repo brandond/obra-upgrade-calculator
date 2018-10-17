@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import re
 import logging
 from collections import namedtuple
+from datetime import date
 
 from peewee import JOIN, fn, prefetch
 
@@ -95,7 +96,7 @@ def recalculate_points(event_type):
             logger.info('Invalid category or insufficient starters for this field')
 
 
-def sum_points(event_type, strict_upgrades=False):
+def sum_points(event_type):
     """
     Calculate running points totals and detect upgrades
     Attempts to do some guessing at category and upgrades based on race participation
@@ -122,22 +123,25 @@ def sum_points(event_type, strict_upgrades=False):
                                Race.date.asc()))
 
     person = None
+    is_woman = False
     had_points = False
+    last_change = date(1970, 1, 1)
     cat_points = []
     categories = {9}
-    needed_upgrade = False
     upgrade_notes = set()
 
     for result in prefetch(results, Points):
         # Print a sum and reset stats when the person changes
         if person != result.person:
             person = result.person
+            is_woman = False
             had_points = False
+            last_change = date(1970, 1, 1)
             cat_points = []
             categories = {9}
-            needed_upgrade = False
             upgrade_notes.clear()
 
+        # Skip DNFs or races without an eligible category
         if result.place.lower() == 'dnf' or not result.race.categories:
             logger.info('{0}, {1}: {2} points for {3} at {4}: {5} ({6} in {7})'.format(
                 result.person.last_name,
@@ -153,13 +157,16 @@ def sum_points(event_type, strict_upgrades=False):
         upgrade_category = max(categories) - 1
         had_points = had_points or bool(cat_points)
 
+        # Don't have any gender information in results, flag person as woman by race participation
+        if 'women' in result.race.name.lower():
+            is_woman = True
+
         # Here's the goofy category change logic
-        if strict_upgrades and needed_upgrade and upgrade_category in result.race.categories:
-            # Needed an upgrade, and is racing in the new category - grant it
-            upgrade_note = 'UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date))
-            upgrade_notes.add(upgrade_note)
+        if upgrade_category in result.race.categories and can_upgrade(event_type, points_sum(cat_points, result.race.date), upgrade_category, True):
+            # Was eligible for an upgrade, and is racing in the new category - grant it
+            upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
             cat_points = []
-            needed_upgrade = False
+            last_change = result.race.date
             categories = {upgrade_category}
         elif not categories.intersection(result.race.categories) and min(categories) > min(result.race.categories):
             # Race category does not overlap with rider category, and the race cateogory is more skilled
@@ -175,15 +182,19 @@ def sum_points(event_type, strict_upgrades=False):
                 upgrade_note += 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum(cat_points, result.race.date))
                 upgrade_notes.add(upgrade_note)
                 cat_points = []
-                needed_upgrade = False
+                last_change = result.race.date
                 categories = {max(result.race.categories)}
         elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
             # Race category does not overlap with rider category, and the race category is less skilled
-            if not had_points:
-                # They've never had any points, probably nobody cares, give them a downgrade
-                categories = {min(result.race.categories)}
+            if is_woman and 'women' not in result.race.name.lower():
+                # Women can race down-category in a men's race
+                pass
+            elif (result.race.date - last_change).days >= 365 or not had_points:
+                # They've never had any points or it's been a while since they upgraded, probably nobody cares, give them a downgrade
                 upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
                 cat_points = []
+                last_change = result.race.date
+                categories = {min(result.race.categories)}
             elif result.points:
                 upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                 result.points[0].value = 0
@@ -192,11 +203,11 @@ def sum_points(event_type, strict_upgrades=False):
             categories.intersection_update(result.race.categories)
 
         if result.points:
-            cat_points.append(Point(result.points[0].value, result.race.date))
+            if result.points[0].value:
+                cat_points.append(Point(result.points[0].value, result.race.date))
             if needs_upgrade(result.person, event_type, points_sum(cat_points, result.race.date), categories):
                 upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
-                needed_upgrade = True
 
             result.points[0].sum_categories = list(categories)
             result.points[0].sum_value = points_sum(cat_points, result.race.date)
@@ -318,11 +329,11 @@ def needs_upgrade(person, event_type, points_sum, categories):
         return points_sum >= 20
 
 
-def can_upgrade(event_type, points_sum, category):
+def can_upgrade(event_type, points_sum, category, should=False):
     """
-    Determine if the rider is allowed to upgrade to a given category, based on their current points
+    Determine if the rider can or should upgrade to a given category, based on their current points
     """
-    if category in [1, 2]:
+    if should or category in [1, 2]:
         return points_sum >= 20
     else:
         return True

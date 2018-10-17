@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 import logging
-from datetime import datetime
+from datetime import date
 
 import click
 
@@ -14,9 +14,8 @@ from .outputs import type_map
 @click.option('--type', type=click.Choice(['cyclocross']), required=True)
 @click.option('--format', type=click.Choice(sorted(type_map.keys())), default='text')
 @click.option('--scrape/--no-scrape', default=True)
-@click.option('--strict/--no-strict', default=False)
 @click.option('--debug/--no-debug', default=False)
-def cli(type, format, scrape, strict, debug):
+def cli(type, format, scrape, debug):
     log_level = 'DEBUG' if debug else 'INFO'
     logging.basicConfig(level=log_level, format='%(levelname)s:%(module)s.%(funcName)s:%(message)s')
 
@@ -26,8 +25,8 @@ def cli(type, format, scrape, strict, debug):
 
     if scrape:
         # Scrape last 5 years of results
-        cur_year = datetime.now().year
-        for year in range(cur_year - 4, cur_year + 1):
+        cur_year = date.today().year
+        for year in range(cur_year - 6, cur_year + 1):
             scrape_year(year, type)
 
         # Load in anything new
@@ -38,7 +37,7 @@ def cli(type, format, scrape, strict, debug):
 
     # Calculate points from new data
     recalculate_points(type)
-    sum_points(type, strict)
+    sum_points(type)
 
     # Finally, output data
     print_points(type, format)

@@ -128,9 +128,15 @@ def scrape_event(event):
         # Do some preflight checks the first time we see a row with a new race_id
         if result['race_id'] not in races:
             races[result['race_id']] = True  # Load results by default
+
             logger.info('Processing Race: [{}]{}: [{}]{}'.format(
                 result['event_id'], result['event_full_name'],
                 result['race_id'], result['race_name']))
+
+            if 'standings' in result['event_full_name'].lower():
+                logging.warning('Skipping Race: Event appears to be series points total')
+                races[result['race_id']] = False
+                continue
 
             # When results are updated, the race_id changes when the offical
             # uploads the new score sheet. Check for an old Race with a different
@@ -166,21 +172,52 @@ def scrape_event(event):
                          updated=datetime.strptime(result['updated_at'][:19], '%Y-%m-%dT%H:%M:%S'))
                  .execute())
 
-        # Load Persons and Results
-        if races[result['race_id']]:
-            if result['person_id'] and result['person_id'] not in people:
-                people[result['person_id']] = True
+        # Skip loading Results if flag is false for this Race
+        if not races[result['race_id']]:
+            continue
+
+        # Create Person if necessary
+        if result['person_id'] and result['person_id'] not in people:
+            if result['first_name'] and result['last_name']:
                 (Person.insert(id=result['person_id'],
                                first_name=result['first_name'],
                                last_name=result['last_name'])
                        .on_conflict_replace()
                        .execute())
+            else:
+                person = find_person(str(result['name']))
+                if person:
+                    result['person_id'] = person.id
+                else:
+                    logger.warning('Cannot find Person for corrupt Result with name {}'.format(result['name']))
+                    continue
+            people[result['person_id']] = True
 
-            (Result.insert(id=result['id'],
-                           race_id=result['race_id'],
-                           person_id=result['person_id'],
-                           place=result['place'])
-                   .execute())
+        # Create Result
+        (Result.insert(id=result['id'],
+                       race_id=result['race_id'],
+                       person_id=result['person_id'],
+                       place=result['place'])
+               .execute())
+
+
+def find_person(name):
+    if ' ' not in name:
+        return None
+
+    try:
+        (first, last) = name.split(' ', 1)
+        return Person.get(Person.first_name ** first, Person.last_name ** last)
+    except Person.DoesNotExist:
+        pass
+
+    try:
+        (last, first) = name.split(' ', 1)
+        return Person.get(Person.first_name ** first, Person.last_name ** last)
+    except Person.DoesNotExist:
+        pass
+
+    return None
 
 
 def scrape_person(person):
