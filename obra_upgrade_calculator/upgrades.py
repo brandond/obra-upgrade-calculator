@@ -138,7 +138,7 @@ def sum_points(event_type, strict_upgrades=False):
             needed_upgrade = False
             upgrade_notes.clear()
 
-        if not result.race.categories:
+        if result.place.lower() == 'dnf' or not result.race.categories:
             logger.info('{0}, {1}: {2} points for {3} at {4}: {5} ({6} in {7})'.format(
                 result.person.last_name,
                 result.person.first_name,
@@ -178,13 +178,13 @@ def sum_points(event_type, strict_upgrades=False):
                 categories = {max(result.race.categories)}
         elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
             # Race category does not overlap with rider category, and the race category is less skilled
-            if result.points:
-                upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
-                result.points[0].value = 0
-            elif not had_points:
+            if not had_points:
                 # They've never had any points, probably nobody cares, give them a downgrade
                 categories = {min(result.race.categories)}
                 upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
+            elif result.points:
+                upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
+                result.points[0].value = 0
         elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
