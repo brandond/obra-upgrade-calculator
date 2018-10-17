@@ -165,35 +165,28 @@ def sum_points(event_type, strict_upgrades=False):
             if categories == {9}:
                 # First result for this rider, assign rider current race category - which may be multiple, such as 1/2 or 3/4
                 categories = set(result.race.categories)
-            elif can_upgrade(event_type, points_sum(cat_points, result.race.date), max(result.race.categories)):
-                # Has enough points to upgrade to this category, grant it
-                upgrade_note = 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum(cat_points, result.race.date))
+            else:
+                # Complain if they don't have enough points for the upgrade
+                if can_upgrade(event_type, points_sum(cat_points, result.race.date), max(result.race.categories)):
+                    upgrade_note = ''
+                else:
+                    upgrade_note = 'PREMATURELY '
+                upgrade_note += 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum(cat_points, result.race.date))
                 if not result.points:
                     upgrade_note += ' ON {}'.format(result.race.date)
                 upgrade_notes.add(upgrade_note)
                 cat_points = []
                 needed_upgrade = False
                 categories = {max(result.race.categories)}
-            else:
-                # Can't self-upgrade to this category, block it
-                if result.points:
-                    upgrade_notes.add('NO POINTS FOR RACING ABOVE CATEGORY')
-                    result.points[0].value = 0
         elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
             # Race category does not overlap with rider category, and the race category is less skilled
-            # See if they've downgraded before we raise the alarm
-            obra = get_obra_data(result.person)
-            site_cat = obra.category(event_type)
-            if site_cat in result.race.categories:
-                categories = {site_cat}
-                upgrade_note = 'DOWNGRADED TO {}'.format(site_cat)
-                if not result.points:
-                    upgrade_note += ' ON {}'.format(result.race.date)
-                upgrade_notes.add(upgrade_note)
-            else:
-                if result.points:
-                    upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
-                    result.points[0].value = 0
+            if result.points:
+                upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
+                result.points[0].value = 0
+            elif points_sum(cat_points, result.race.date) == 0:
+                # They don't have any points, probably nobody cares, give them a downgrade
+                categories = {min(result.race.categories)}
+                upgrade_notes.add('DOWNGRADED TO {} ON {}'.format(min(result.race.categories), result.race.date))
         elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
             # Refine category for rider who'd only been seen in multi-category races
             categories.intersection_update(result.race.categories)
@@ -324,9 +317,7 @@ def can_upgrade(event_type, points_sum, category):
     """
     Determine if the rider is allowed to upgrade to a given category, based on their current points
     """
-    if category == 1:
-        return points_sum >= 35
-    elif category == 2:
+    if category in [1, 2]:
         return points_sum >= 20
     else:
         return True
@@ -342,6 +333,6 @@ def get_obra_data(person):
 
 def points_sum(points, race_date):
     """
-    Calculate a sum of points earned within the last year
+    Calculate a sum of points earned within the last year (plus a one-week grace period)
     """
-    return sum(p.value for p in points if (race_date - p.date).days <= 365)
+    return sum(p.value for p in points if (race_date - p.date).days <= 372)
