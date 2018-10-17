@@ -182,6 +182,7 @@ def sum_points(event_type, strict_upgrades=False):
                 # They've never had any points, probably nobody cares, give them a downgrade
                 categories = {min(result.race.categories)}
                 upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
+                cat_points = []
             elif result.points:
                 upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                 result.points[0].value = 0
