@@ -21,20 +21,21 @@ db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                            ('locking_mode', 'EXCLUSIVE'),
                            ('synchronous', 'OFF')))
 
+class ObraModel(Model):
+    class Meta:
+        database = db
+        only_save_dirty = True
 
-class Series(Model):
+
+class Series(ObraModel):
     id = IntegerField(verbose_name='Series ID', primary_key=True)
     name = CharField(verbose_name='Series Name')
     type = CharField(verbose_name='Series Type')
     year = IntegerField(verbose_name='Series Year')
     dates = CharField(verbose_name='Series Months/Days')
 
-    class Meta:
-        database = db
-        only_save_dirty = True
 
-
-class Event(Model):
+class Event(ObraModel):
     id = IntegerField(verbose_name='Event ID', primary_key=True)
     name = CharField(verbose_name='Event Name')
     type = CharField(verbose_name='Event Type')
@@ -42,12 +43,8 @@ class Event(Model):
     date = CharField(verbose_name='Event Month/Day')
     series = ForeignKeyField(verbose_name='Event Series', model=Series, backref='events', null=True)
 
-    class Meta:
-        database = db
-        only_save_dirty = True
 
-
-class Race(Model):
+class Race(ObraModel):
     id = IntegerField(verbose_name='Race ID', primary_key=True)
     name = CharField(verbose_name='Race Name')
     date = DateField(verbose_name='Race Date')
@@ -56,22 +53,14 @@ class Race(Model):
     updated = DateTimeField(verbose_name='Results Updated')
     event = ForeignKeyField(verbose_name='Race Event', model=Event, backref='races')
 
-    class Meta:
-        database = db
-        only_save_dirty = True
 
-
-class Person(Model):
+class Person(ObraModel):
     id = IntegerField(verbose_name='Person ID', primary_key=True)
     first_name = CharField(verbose_name='First Name')
     last_name = CharField(verbose_name='Last Name')
 
-    class Meta:
-        database = db
-        only_save_dirty = True
 
-
-class ObraPerson(Model):
+class ObraPerson(ObraModel):
     license = IntegerField(verbose_name='License', primary_key=True)
     person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
     mtb_category = IntegerField(verbose_name='MTB Category', null=True)
@@ -80,10 +69,6 @@ class ObraPerson(Model):
     road_category = IntegerField(verbose_name='Road Category', null=True)
     track_category = IntegerField(verbose_name='Track Category', null=True)
     updated = DateTimeField(verbose_name='Person Updated')
-
-    class Meta:
-        database = db
-        only_save_dirty = True
 
     def category(self, event_type):
         event_type = event_type.replace('mountain_bike', 'mtb')
@@ -95,18 +80,14 @@ class ObraPerson(Model):
         return datetime.now() - self.updated >= timedelta(days=1)
 
 
-class Result(Model):
+class Result(ObraModel):
     id = IntegerField(verbose_name='Result ID', primary_key=True)
     race = ForeignKeyField(verbose_name='Result Race', model=Race, backref='results')
     person = ForeignKeyField(verbose_name='Result Person', model=Person, backref='results', null=True)
     place = CharField(verbose_name='Place')
 
-    class Meta:
-        database = db
-        only_save_dirty = True
 
-
-class Points(Model):
+class Points(ObraModel):
     result = ForeignKeyField(verbose_name='Points from Result', model=Result, backref='points', primary_key=True)
     starters = CharField(verbose_name='Starting Field Size', default='?')
     value = CharField(verbose_name='Points for Place', default='0')
@@ -115,9 +96,16 @@ class Points(Model):
     sum_value = IntegerField(verbose_name='Current Points', default=0)
     sum_categories = JSONField(verbose_name='Current Category', default=[])
 
-    class Meta:
-        database = db
-        only_save_dirty = True
+
+class Rank(ObraModel):
+    result = ForeignKeyField(verbose_name='Rank from Result', model=Result, backref='rank', primary_key=True)
+    value = IntegerField(verbose_name='Rank for Place')
+
+
+class Quality(ObraModel):
+    race = ForeignKeyField(verbose_name='Quality Race', model=Race, backref='quality')
+    value = IntegerField(verbose_name='Race Quality')
+    points_per_place = IntegerField(verbose_name='Points per Place')
 
 
 db.connect()
@@ -128,4 +116,6 @@ Person.create_table(fail_silently=True)
 ObraPerson.create_table(fail_silently=True)
 Result.create_table(fail_silently=True)
 Points.create_table(fail_silently=True)
+Rank.create_table(fail_silently=True)
+Quality.create_table(fail_silently=True)
 logging.debug('Using local database {} at {}'.format(db, db.database))
