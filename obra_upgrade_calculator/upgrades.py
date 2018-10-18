@@ -236,6 +236,9 @@ def print_points(event_type, output_format):
     """
     Print out points tally for each Person
     """
+    cur_year = date.today().year
+    start_date = date(cur_year - 1, 1, 1)
+
     upgrades_needed = (Points.select(Points,
                                      Result.place,
                                      Person.id,
@@ -247,6 +250,7 @@ def print_points(event_type, output_format):
                              .switch(Result)
                              .join(Race)
                              .join(Event)
+                             .where(Race.date >= start_date)
                              .where(Event.type == event_type)
                              .group_by(Person.id)
                              .having(Points.needs_upgrade == True)
