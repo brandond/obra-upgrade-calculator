@@ -3,7 +3,6 @@
 from __future__ import unicode_literals
 
 import logging
-import re
 from datetime import datetime, timedelta
 
 import requests
@@ -11,20 +10,19 @@ from lxml import html
 from peewee import JOIN, fn
 
 from .models import Event, ObraPerson, Person, Race, Result, Series
+from .data import CATEGORY_RE, AGE_RANGE_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
-CATEGORY_RE = re.compile(r'(?:^| )(beginner|[a-c]|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
-AGE_RANGE_RE = re.compile(r'([7-9]|1[0-9])(-([7-9]|1[0-9]))?')
 
 
-def scrape_year(year, event_type):
+def scrape_year(year, discipline):
     """
     Scrape all results for a given year
     Avoid scraping 'all' since it will break scoring
     """
-    logger.info('Getting {} events for {}'.format(event_type, year))
-    url = 'http://obra.org/results/{}/{}'.format(year, event_type)
+    logger.info('Getting {} events for {}'.format(discipline, year))
+    url = 'http://obra.org/results/{}/{}'.format(year, discipline)
     response = session.get(url)
     response.raise_for_status()
     tree = html.fromstring(response.text)
@@ -49,24 +47,31 @@ def scrape_year(year, event_type):
             event_date = event_anchor.text.strip()
             event_name = parent_name
 
+        event_discipline = get_discipline(event_name, discipline)
+        if not event_discipline:
+            logger.warn('Found Event id={} name={} date={} with blacklisted discipline'.format(event_id, event_name, event_date))
+            continue
+
         if element.get('class') == 'multi-day-event-child':
             # multi-day-event-child class used for series events
-            logger.info('Found Event id={} name={} date={} with parent {}'.format(event_id, event_name, event_date, parent_id))
-            (Event.insert(id=event_id,
-                          name=event_name,
-                          type=event_type,
-                          year=year,
-                          date=event_date,
-                          series_id=parent_id)
-                  .on_conflict_replace()
-                  .execute())
+            logger.info('Found Event id={} name={} date={} discipline={} with series {}'.format(event_id, event_name, event_date, event_discipline, parent_id))
+            if parent_id:
+                (Event.insert(id=event_id,
+                              name=event_name,
+                              discipline=event_discipline,
+                              year=year,
+                              date=event_date,
+                              series_id=parent_id)
+                      .on_conflict_replace()
+                      .execute())
+            else:
+                logger.warn('Found multi-day-event-child without a series!')
         else:
             if '-' in event_date:
                 # Assume anything with a date range is a series
                 logger.info('Found Series id={} name={} dates={}'.format(event_id, event_name, event_date))
                 (Series.insert(id=event_id,
                                name=event_name,
-                               type=event_type,
                                year=year,
                                dates=event_date)
                        .on_conflict_replace()
@@ -75,10 +80,10 @@ def scrape_year(year, event_type):
                 parent_name = event_name
             else:
                 # Single date with no parent, must be a standalone event
-                logger.info('Found Event id={} name={} date={}'.format(event_id, event_name, event_date))
+                logger.info('Found Event id={} name={} date={} discipline={}'.format(event_id, event_name, event_date, event_discipline))
                 (Event.insert(id=event_id,
                               name=event_name,
-                              type=event_type,
+                              discipline=event_discipline,
                               year=year,
                               date=event_date)
                       .on_conflict_replace()
@@ -124,7 +129,8 @@ def scrape_event(event):
 
     people = dict()
     races = dict()
-    for result in response.json():
+    results = response.json()
+    for result in results:
         # Do some preflight checks the first time we see a row with a new race_id
         if result['race_id'] not in races:
             races[result['race_id']] = True  # Load results by default
@@ -254,7 +260,7 @@ def get_categories(race_name):
         return []
     elif cat_match:
         cats = cat_match.group(1)
-        if cats.lower() == 'beginner':
+        if cats.lower() in ['beginner', 'novice']:
             cats = '5'
         elif cats.lower() == 'c':
             cats = '4'
@@ -265,3 +271,17 @@ def get_categories(race_name):
         return [int(c) for c in cats.split('/')]
     else:
         return []
+
+
+def get_discipline(event_name, event_discipline):
+    for upgrade_discipline, event_disciplines in DISCIPLINE_MAP.items():
+        if event_discipline in event_disciplines:
+            logger.debug('Using upgrade_discipline={} for event_discipline={}'.format(upgrade_discipline, event_discipline))
+            if upgrade_discipline in DISCIPLINE_RE_MAP:
+                for discipline_name, discipline_re in DISCIPLINE_RE_MAP[upgrade_discipline]:
+                    logger.debug('Checking discipline_name={} discipline_re={} for event_name={}'.format(discipline_name, discipline_re.pattern, event_name))
+                    if discipline_re.search(event_name):
+                        logger.debug('Matched override discipline_name={}'.format(discipline_name))
+                        return discipline_name
+    logger.debug('Returning event_discipline={}'.format(event_discipline))
+    return event_discipline

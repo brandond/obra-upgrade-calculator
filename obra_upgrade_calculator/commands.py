@@ -7,15 +7,16 @@ from datetime import date
 
 import click
 
-from .outputs import type_map
+from .outputs import OUTPUT_MAP
+from .data import DISCIPLINE_MAP
 
 
 @click.command()
-@click.option('--type', type=click.Choice(['cyclocross']), required=True)
-@click.option('--format', type=click.Choice(sorted(type_map.keys())), default='text')
+@click.option('--discipline', type=click.Choice(DISCIPLINE_MAP.keys()), required=True)
+@click.option('--output', type=click.Choice(sorted(OUTPUT_MAP.keys())), default='text')
 @click.option('--scrape/--no-scrape', default=True)
 @click.option('--debug/--no-debug', default=False)
-def cli(type, format, scrape, debug):
+def cli(discipline, output, scrape, debug):
     log_level = 'DEBUG' if debug else 'INFO'
     logging.basicConfig(level=log_level, format='%(levelname)s:%(module)s.%(funcName)s:%(message)s')
 
@@ -27,7 +28,8 @@ def cli(type, format, scrape, debug):
         # Scrape last 5 years of results
         cur_year = date.today().year
         for year in range(cur_year - 6, cur_year + 1):
-            scrape_year(year, type)
+            for event_discipline in DISCIPLINE_MAP[discipline]:
+                scrape_year(year, event_discipline)
 
         # Load in anything new
         scrape_new()
@@ -36,11 +38,11 @@ def cli(type, format, scrape, debug):
         scrape_recent(3)
 
     # Calculate points from new data
-    recalculate_points(type)
-    sum_points(type)
+    recalculate_points(discipline)
+    sum_points(discipline)
 
     # Finally, output data
-    print_points(type, format)
+    print_points(discipline, output)
 
 
 if __name__ == '__main__':

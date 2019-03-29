@@ -25,26 +25,31 @@ db = APSWDatabase(expanduser('~/.obra.sqlite3'),
 class Series(Model):
     id = IntegerField(verbose_name='Series ID', primary_key=True)
     name = CharField(verbose_name='Series Name')
-    type = CharField(verbose_name='Series Type')
     year = IntegerField(verbose_name='Series Year')
     dates = CharField(verbose_name='Series Months/Days')
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
 
 class Event(Model):
     id = IntegerField(verbose_name='Event ID', primary_key=True)
     name = CharField(verbose_name='Event Name')
-    type = CharField(verbose_name='Event Type')
+    discipline = CharField(verbose_name='Event Discipline', index=True)
     year = IntegerField(verbose_name='Event Year')
     date = CharField(verbose_name='Event Month/Day')
     series = ForeignKeyField(verbose_name='Event Series', model=Series, backref='events', null=True)
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
+
+    @property
+    def discipline_title(self):
+        return self.discipline.replace('_', ' ').title()
 
 
 class Race(Model):
@@ -58,6 +63,7 @@ class Race(Model):
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
 
@@ -68,12 +74,13 @@ class Person(Model):
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
 
 class ObraPerson(Model):
-    license = IntegerField(verbose_name='License', primary_key=True)
-    person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
+    person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra', primary_key=True)
+    license = IntegerField(verbose_name='License', null=True)
     mtb_category = IntegerField(verbose_name='MTB Category', null=True)
     dh_category = IntegerField(verbose_name='DH Category', null=True)
     ccx_category = IntegerField(verbose_name='CX Category', null=True)
@@ -83,14 +90,20 @@ class ObraPerson(Model):
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
-    def category(self, event_type):
-        event_type = event_type.replace('mountain_bike', 'mtb')
-        event_type = event_type.replace('cyclocross', 'ccx')
-        event_type = event_type.replace('downhill', 'dh')
-        return getattr(self, event_type + '_category', None)
+    def category_for_discipline(self, discipline):
+        discipline = discipline.replace('mountain_bike', 'mtb')
+        discipline = discipline.replace('cyclocross', 'ccx')
+        discipline = discipline.replace('criterium', 'road')
+        discipline = discipline.replace('time_trial', 'road')
+        discipline = discipline.replace('gravel', 'road')
+        discipline = discipline.replace('downhill', 'dh')
+        discipline = discipline.replace('super_d', 'dh')
+        return getattr(self, discipline + '_category', None)
 
+    @property
     def is_expired(self):
         return datetime.now() - self.updated >= timedelta(days=1)
 
@@ -99,10 +112,11 @@ class Result(Model):
     id = IntegerField(verbose_name='Result ID', primary_key=True)
     race = ForeignKeyField(verbose_name='Result Race', model=Race, backref='results')
     person = ForeignKeyField(verbose_name='Result Person', model=Person, backref='results', null=True)
-    place = CharField(verbose_name='Place')
+    place = CharField(verbose_name='Place', index=True)
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
 
@@ -117,6 +131,7 @@ class Points(Model):
 
     class Meta:
         database = db
+        without_rowid = True
         only_save_dirty = True
 
 

@@ -13,10 +13,10 @@ HTML_HEADER = '''
         <meta charset="utf-8">
         <title>OBRA: Upgrade Points for {0}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="stylesheet" media="all" href="https://obra.org/assets/application-367cae7561f3a791ddfdc0fe0224815ed8c86991ffa918002134a4b834ed8de7.css" />
-        <link rel="stylesheet" media="screen" href="https://obra.org/assets/registration_engine/application-dbd90166764121e1ddeaf5c3adc56246b6fb9da8bf6e25e2656046d867bd8a4d.css" />
-        <link rel="shortcut icon" type="image/x-icon" href="https://obra.org/assets/favicon-92e34b6df1439f05a9c06f664fc3e29fd040bc511eb6ffad1dbecbc1f004b2c8.ico" />
-        <link rel="apple-touch-icon" type="image/png" href="https://obra.org/assets/apple-touch-icon-017f423f2e51e0838ead27ad35b6dd5d093e6d64a61c8d62bf633937b7df4d38.png" />
+        <link rel="stylesheet" media="all" href="https://obra.org/assets/application-dd5048284cc6fef6c0b95b453b0f58065ba4863b794b5875262e107c9b39c9bc.css" />
+        <link rel="stylesheet" media="screen" href="https://obra.org/assets/registration_engine/application-d124af1d06dfaa2cf725f48e0237bfe328b1bffb680a16c8853a40978279c767.css" />
+        <link rel="shortcut icon" type="image/x-icon" href="https://obra.org/assets/favicon-d8d3df3a13d3a80d51fffc68da9d6f49ba553932a8fe618068984dcb514363c3.ico" />
+        <link rel="apple-touch-icon" type="image/png" href="https://obra.org/assets/apple-touch-icon-8790d9d360b222bef07545037f2878ed5918ee49ebda1e0913a222ff6872c04e.png" />
     </head>
     <body>
       <div class="container page-nav">
@@ -71,6 +71,7 @@ HTML_PERSON_HEADER = '''
                 <th class="place"></th>
                 <th class="points hidden-xs">Points</th>
                 <th class="points_total">Total Pts</th>
+                <th class="discipline hidden-xs">Discipline</th>
                 <th class="event">Event</th>
                 <th class="category">Race</th>
                 <th class="place">Category</th>
@@ -86,6 +87,7 @@ HTML_POINT = '''
                 <td class="place">{point.result.place}</td>
                 <td class="points hidden-xs">{point.value}</td>
                 <td class="points_total">{point.sum_value}</td>
+                <td class="discipline hidden-xs">{point.result.race.event.discipline_title}</td>
                 <td class="event">
                   <a href="https://obra.org/events/{point.result.race.event.id}/results#race_{point.result.race.id}">
                     {point.result.race.event.name}
@@ -118,8 +120,8 @@ HTML_FOOTER = '''
 
 
 class OutputBase(object):
-    def __init__(self, event_type, path='/dev/stdout'):
-        self.event_type = event_type
+    def __init__(self, discipline, path='/dev/stdout'):
+        self.discipline = discipline
         self.output = io.TextIOWrapper(io.open(path, 'wb'))
 
     def __enter__(self):
@@ -160,18 +162,19 @@ class OutputBase(object):
 class TextOutput(OutputBase):
     def header(self):
         self.output.write('--- Upgrade Points for {} ---\n\n'.format(
-            self.event_type.capitalize()))
+            self.discipline.capitalize()))
 
     def point(self, point):
         if point.notes:
             point.notes = '*** {} ***'.format(point.notes)
-        self.output.write('{0:<24} | {1:>2} points in Cat {2:<3} | {3:>2} for {4}/{5:<2} at {6}: {7} on {8}  {9}\n'.format(
+        self.output.write('{0:<24} | {1:>2} points in Cat {2:<3} | {3:>2} for {4:>2}/{5:<2} at [{6}]{7}: {8} on {9}  {10}\n'.format(
             ', '.join([point.result.person.last_name, point.result.person.first_name]),
             point.sum_value,
             '/'.join(str(c) for c in point.sum_categories),
             point.value,
             point.result.place,
             point.starters,
+            point.result.race.event.discipline_title,
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
@@ -184,7 +187,7 @@ class TextOutput(OutputBase):
 
 class HtmlOutput(OutputBase):
     def header(self):
-        self.output.write(dedent(HTML_HEADER).format(self.event_type.capitalize(), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.output.write(dedent(HTML_HEADER).format(self.discipline.capitalize(), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
     def start_upgrades(self):
         self.output.write(dedent(HTML_UPGRADES_HEADER))
@@ -215,7 +218,7 @@ class HtmlOutput(OutputBase):
 class JsonOutput(OutputBase):
     def header(self):
         self.output.write('{\n')
-        self.output.write('  "event_type": "{}",\n'.format(self.event_type))
+        self.output.write('  "discipline": "{}",\n'.format(self.discipline))
         self.output.write('  "people": [\n')
 
     def start_person(self, person):
@@ -235,8 +238,9 @@ class JsonOutput(OutputBase):
             point.starters,
             point.value,
             point.sum_value)
-        self.point_buffer += '"category": "{}", "event": "{}", "race": "{}", "date": "{}", "notes": "{}" '.format(
+        self.point_buffer += '"category": "{}", "discipline": "{}", "event": "{}", "race": "{}", "date": "{}", "notes": "{}" '.format(
             '/'.join(str(c) for c in point.sum_categories),
+            point.result.race.event.discipline,
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
@@ -258,7 +262,7 @@ class CsvOutput(OutputBase):
         self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
 
     def point(self, point):
-        self.output.write('{0},{1:>2},{2:>2},{3:>2},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,{9},"{10}"\n'.format(
+        self.output.write('{0},{1:>2},{2:>2},{3:>2},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,"{9}"\t,{10},"{11}"\n'.format(
             point.result.place,
             point.starters,
             point.value,
@@ -266,21 +270,22 @@ class CsvOutput(OutputBase):
             point.result.person.first_name,
             point.result.person.last_name,
             '/'.join(str(c) for c in point.sum_categories),
+            point.result.race.event.discipline_title,
             point.result.race.event.name,
             point.result.race.name,
             point.result.race.date,
             point.notes))
 
 
-type_map = {'text': TextOutput,
-            'html': HtmlOutput,
-            'json': JsonOutput,
-            'csv': CsvOutput,
-            }
+OUTPUT_MAP = {'text': TextOutput,
+              'html': HtmlOutput,
+              'json': JsonOutput,
+              'csv': CsvOutput,
+              }
 
 
 def get_writer(output_format, *args, **kwargs):
-    if output_format in type_map:
-        return type_map[output_format](*args, **kwargs)
+    if output_format in OUTPUT_MAP:
+        return OUTPUT_MAP[output_format](*args, **kwargs)
     else:
-        raise NotImplemented()
+        raise NotImplementedError()
