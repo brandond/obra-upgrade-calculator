@@ -259,7 +259,7 @@ class JsonOutput(OutputBase):
 
 class CsvOutput(OutputBase):
     def header(self):
-        self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Event, Race, Date, Notes\n')
+        self.output.write('Place, Starters, Points, Points Total, First Name, Last Name, Category, Discipline, Event, Race, Date, Notes\n')
 
     def point(self, point):
         self.output.write('{0},{1:>2},{2:>2},{3:>2},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,"{9}"\t,{10},"{11}"\n'.format(
