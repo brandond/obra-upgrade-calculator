@@ -81,11 +81,11 @@ class Person(Model):
 class ObraPerson(Model):
     person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra', primary_key=True)
     license = IntegerField(verbose_name='License', null=True)
-    mtb_category = IntegerField(verbose_name='MTB Category', null=True)
-    dh_category = IntegerField(verbose_name='DH Category', null=True)
-    ccx_category = IntegerField(verbose_name='CX Category', null=True)
-    road_category = IntegerField(verbose_name='Road Category', null=True)
-    track_category = IntegerField(verbose_name='Track Category', null=True)
+    mtb_category = IntegerField(verbose_name='MTB Category', default=3)
+    dh_category = IntegerField(verbose_name='DH Category', default=3)
+    ccx_category = IntegerField(verbose_name='CX Category', default=5)
+    road_category = IntegerField(verbose_name='Road Category', default=5)
+    track_category = IntegerField(verbose_name='Track Category', default=5)
     updated = DateTimeField(verbose_name='Person Updated')
 
     class Meta:
@@ -101,7 +101,7 @@ class ObraPerson(Model):
         discipline = discipline.replace('gravel', 'road')
         discipline = discipline.replace('downhill', 'dh')
         discipline = discipline.replace('super_d', 'dh')
-        return getattr(self, discipline + '_category', None)
+        return getattr(self, discipline + '_category')
 
     @property
     def is_expired(self):
