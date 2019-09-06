@@ -142,13 +142,16 @@ def sum_points(upgrade_discipline):
                 is_woman = True
 
             # Here's the goofy category change logic
-            if upgrade_category in result.race.categories and can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points)):
-                # Was eligible for an upgrade, and is racing in the new category - grant it
+            if   (upgrade_category in result.race.categories and
+                  can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points)) and
+                  (date.today() - result.race.date).days > 14):
+                # Was eligible for an upgrade, and raced in a field that includes the upgrade category, and the race was over 2 weeks ago
                 upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
                 cat_points = []
                 last_change = result.race.date
                 categories = {upgrade_category}
-            elif not categories.intersection(result.race.categories) and min(categories) > min(result.race.categories):
+            elif (not categories.intersection(result.race.categories) and
+                  min(categories) > min(result.race.categories)):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
                 if categories == {9}:
                     # First result for this rider, assign rider current race category - which may be multiple, such as 1/2 or 3/4
@@ -164,7 +167,8 @@ def sum_points(upgrade_discipline):
                     cat_points = []
                     last_change = result.race.date
                     categories = {max(result.race.categories)}
-            elif not categories.intersection(result.race.categories) and max(categories) < max(result.race.categories):
+            elif (not categories.intersection(result.race.categories) and
+                  max(categories) < max(result.race.categories)):
                 # Race category does not overlap with rider category, and the race category is less skilled
                 if is_woman and 'women' not in result.race.name.lower():
                     # Women can race down-category in a men's race
@@ -178,7 +182,8 @@ def sum_points(upgrade_discipline):
                 elif result.points:
                     upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                     result.points[0].value = 0
-            elif len(categories.intersection(result.race.categories)) < len(categories) and len(categories) > 1:
+            elif (len(categories.intersection(result.race.categories)) < len(categories) and
+                  len(categories) > 1):
                 # Refine category for rider who'd only been seen in multi-category races
                 categories.intersection_update(result.race.categories)
 
