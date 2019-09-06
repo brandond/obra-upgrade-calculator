@@ -98,6 +98,7 @@ class ObraPerson(Model):
         discipline = discipline.replace('cyclocross', 'ccx')
         discipline = discipline.replace('criterium', 'road')
         discipline = discipline.replace('time_trial', 'road')
+        discipline = discipline.replace('circuit', 'road')
         discipline = discipline.replace('gravel', 'road')
         discipline = discipline.replace('downhill', 'dh')
         discipline = discipline.replace('super_d', 'dh')
