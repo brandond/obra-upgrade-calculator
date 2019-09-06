@@ -24,6 +24,9 @@ setup(
     entry_points={
         'console_scripts': ['obra-upgrade-calculator=obra_upgrade_calculator.commands:cli']
     },
+    extras_require={
+        'dev': ['setuptools-version-command'],
+    },
     include_package_data=True,
     install_requires=requirements,
     long_description=readme,
@@ -31,5 +34,5 @@ setup(
     packages=find_packages(exclude=('docs')),
     python_requires='>=2.7',
     url='https://github.com/brandond/obra-upgrade-calculator',
-    version='1.0.0',
+    version_command=('git describe --tags --dirty', 'pep440-git-full'),
 )

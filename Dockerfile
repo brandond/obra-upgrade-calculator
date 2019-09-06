@@ -13,6 +13,7 @@ RUN /app/bin/python setup.py fetch --all --version=${SQLITE_VERSION}
 RUN /app/bin/python setup.py build --enable-all-extensions install
 RUN /app/bin/python setup.py test
 COPY requirements.txt /usr/src/obra-upgrade-calculator/requirements.txt
+RUN /app/bin/pip install setuptools-version-command
 RUN /app/bin/pip install -r /usr/src/obra-upgrade-calculator/requirements.txt
 COPY ./ /usr/src/obra-upgrade-calculator
 RUN /app/bin/pip install --no-deps /usr/src/obra-upgrade-calculator/
