@@ -142,14 +142,14 @@ def sum_points(upgrade_discipline):
                 is_woman = True
 
             # Here's the goofy category change logic
-            if   (upgrade_category in result.race.categories and
-                  can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points)) and
-                  (date.today() - result.race.date).days > 14):
+            if (upgrade_category in result.race.categories and
+                can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points))):
                 # Was eligible for an upgrade, and raced in a field that includes the upgrade category, and the race was over 2 weeks ago
-                upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
-                cat_points = []
-                last_change = result.race.date
-                categories = {upgrade_category}
+                if (date.today() - result.race.date).days > 14:
+                    upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
+                    cat_points = []
+                    last_change = result.race.date
+                    categories = {upgrade_category}
             elif (not categories.intersection(result.race.categories) and
                   min(categories) > min(result.race.categories)):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
