@@ -13,10 +13,14 @@ HTML_HEADER = '''
         <meta charset="utf-8">
         <title>OBRA: Upgrade Points for {0}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="stylesheet" media="all" href="https://obra.org/assets/application-dd5048284cc6fef6c0b95b453b0f58065ba4863b794b5875262e107c9b39c9bc.css" />
-        <link rel="stylesheet" media="screen" href="https://obra.org/assets/registration_engine/application-d124af1d06dfaa2cf725f48e0237bfe328b1bffb680a16c8853a40978279c767.css" />
-        <link rel="shortcut icon" type="image/x-icon" href="https://obra.org/assets/favicon-d8d3df3a13d3a80d51fffc68da9d6f49ba553932a8fe618068984dcb514363c3.ico" />
-        <link rel="apple-touch-icon" type="image/png" href="https://obra.org/assets/apple-touch-icon-8790d9d360b222bef07545037f2878ed5918ee49ebda1e0913a222ff6872c04e.png" />
+        <link rel="stylesheet" media="all"
+        href="https://obra.org/assets/application-dd5048284cc6fef6c0b95b453b0f58065ba4863b794b5875262e107c9b39c9bc.css" />
+        <link rel="stylesheet" media="screen"
+        href="https://obra.org/assets/registration_engine/application-d124af1d06dfaa2cf725f48e0237bfe328b1bffb680a16c8853a40978279c767.css" />
+        <link rel="shortcut icon" type="image/x-icon"
+        href="https://obra.org/assets/favicon-d8d3df3a13d3a80d51fffc68da9d6f49ba553932a8fe618068984dcb514363c3.ico" />
+        <link rel="apple-touch-icon" type="image/png"
+        href="https://obra.org/assets/apple-touch-icon-8790d9d360b222bef07545037f2878ed5918ee49ebda1e0913a222ff6872c04e.png" />
     </head>
     <body>
       <div class="container page-nav">

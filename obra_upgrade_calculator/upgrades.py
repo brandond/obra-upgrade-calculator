@@ -12,7 +12,7 @@ from peewee import JOIN, fn, prefetch
 from .models import Event, Person, Points, Race, Result
 from .outputs import get_writer
 from .scrapers import scrape_person
-from .data import NAME_RE, NUMBER_RE, SCHEDULE, UPGRADES, DISCIPLINE_MAP
+from .data import NAME_RE, NUMBER_RE, SCHEDULE_2018, SCHEDULE_2019, SCHEDULE_2019_DATE, UPGRADES, DISCIPLINE_MAP
 
 logger = logging.getLogger(__name__)
 Point = namedtuple('Point', 'value,date')
@@ -97,8 +97,8 @@ def sum_points(upgrade_discipline):
                              Race.date,
                              Race.categories,
                              (Result.select(fn.COUNT(Result.id))
-                                    .where(Result.race_id == Race.id)
-                                    .where(~(Result.place.contains('dns')))).alias('result_count'),
+                                    .where(Result.race_id == Race.id)  # noqa: E127
+                                    .where(~(Result.place.contains('dns')))).alias('result_count'),  # noqa: E127
                              Event.id,
                              Event.name,
                              Event.discipline)
@@ -131,6 +131,7 @@ def sum_points(upgrade_discipline):
             upgrade_notes.clear()
 
         result_points_value = result.points[0].value if result.points else 0
+        days_since_race = (date.today() - result.race.date).days
 
         # Only process finishes (no dnf/dns/dq) with a known category
         if NUMBER_RE.match(result.place) and result.race.categories:
@@ -142,14 +143,15 @@ def sum_points(upgrade_discipline):
                 is_woman = True
 
             # Here's the goofy category change logic
-            if (upgrade_category in result.race.categories and
-                can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points))):
-                # Was eligible for an upgrade, and raced in a field that includes the upgrade category, and the race was over 2 weeks ago
-                if (date.today() - result.race.date).days > 14:
-                    upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
-                    cat_points = []
-                    last_change = result.race.date
-                    categories = {upgrade_category}
+            if   (upgrade_category in result.race.categories and
+                  can_upgrade(upgrade_discipline, points_sum(cat_points, result.race.date), upgrade_category, len(cat_points)) and
+                  needs_upgrade(result.person, upgrade_discipline, points_sum(cat_points, result.race.date), categories) and
+                  days_since_race > 14):
+                # Was eligible for and needed an upgrade, and raced in a field that includes the upgrade category, and the race was over 2 weeks ago
+                upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum(cat_points, result.race.date)))
+                cat_points = []
+                last_change = result.race.date
+                categories = {upgrade_category}
             elif (not categories.intersection(result.race.categories) and
                   min(categories) > min(result.race.categories)):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
@@ -298,18 +300,22 @@ def get_points_schedule(event_discipline, race):
     See: http://www.obra.org/upgrade_rules.html
     """
     field = 'women' if re.search('women|junior', race.name, re.I) else 'open'
+    if race.date >= SCHEDULE_2019_DATE:
+        schedule = SCHEDULE_2019
+    else:
+        schedule = SCHEDULE_2018
 
-    if event_discipline in SCHEDULE:
-        if field in SCHEDULE[event_discipline]:
-            field_size_list = SCHEDULE[event_discipline][field]
+    if event_discipline in schedule:
+        if field in schedule[event_discipline]:
+            field_size_list = schedule[event_discipline][field]
         else:
-            field_size_list = SCHEDULE[event_discipline]['open']
+            field_size_list = schedule[event_discipline]['open']
 
         for field_size in field_size_list:
             if race.result_count >= field_size['min'] and race.result_count <= field_size['max']:
                 return field_size['points']
     else:
-        logger.warn('No points schedule for event_discipline={}'.format(event_discipline))
+        logger.warn('No points schedule for event_discipline={} field={} race.date={}'.format(event_discipline, field, race.date))
 
     return []
 
