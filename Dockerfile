@@ -1,8 +1,7 @@
 FROM python:3-alpine AS builder
 RUN apk --no-cache upgrade
 RUN apk --no-cache add alpine-sdk libxml2-dev libxslt-dev
-RUN pip install virtualenv
-RUN virtualenv /app
+RUN python3 -m venv /app
 RUN source /app/bin/activate
 ARG SQLITE_VERSION=3.28.0
 ARG APSW_VERSION=${SQLITE_VERSION}-r1

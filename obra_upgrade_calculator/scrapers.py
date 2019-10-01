@@ -203,7 +203,8 @@ def scrape_event(event):
         (Result.insert(id=result['id'],
                        race_id=result['race_id'],
                        person_id=result['person_id'],
-                       place=result['place'])
+                       place=result['place'],
+                       time=result['time'])
                .execute())
 
 

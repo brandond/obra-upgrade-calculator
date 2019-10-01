@@ -23,6 +23,9 @@ db = APSWDatabase(expanduser('~/.obra.sqlite3'),
 
 
 class Series(Model):
+    """
+    An OBRA race series spanning multiple events over more than one day.
+    """
     id = IntegerField(verbose_name='Series ID', primary_key=True)
     name = CharField(verbose_name='Series Name')
     year = IntegerField(verbose_name='Series Year')
@@ -35,6 +38,9 @@ class Series(Model):
 
 
 class Event(Model):
+    """
+    A single race day - may be standalone or part of a series.
+    """
     id = IntegerField(verbose_name='Event ID', primary_key=True)
     name = CharField(verbose_name='Event Name')
     discipline = CharField(verbose_name='Event Discipline', index=True)
@@ -53,6 +59,9 @@ class Event(Model):
 
 
 class Race(Model):
+    """
+    A single race at an event, with one or more results.
+    """
     id = IntegerField(verbose_name='Race ID', primary_key=True)
     name = CharField(verbose_name='Race Name')
     date = DateField(verbose_name='Race Date')
@@ -68,6 +77,10 @@ class Race(Model):
 
 
 class Person(Model):
+    """
+    A person who participated in a race.
+    We maintain our own ID since I don't want to have to scrape all of OBRA's member DB.
+    """
     id = IntegerField(verbose_name='Person ID', primary_key=True)
     first_name = CharField(verbose_name='First Name')
     last_name = CharField(verbose_name='Last Name')
@@ -79,6 +92,11 @@ class Person(Model):
 
 
 class ObraPerson(Model):
+    """
+    An OBRA member.
+    OBRA member data is only scraped when necessary to confirm whether or not someone needs an upgrade.
+    It is also cached for a day for performance purposes.
+    """
     person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra', primary_key=True)
     license = IntegerField(verbose_name='License', null=True)
     mtb_category = IntegerField(verbose_name='MTB Category', default=3)
@@ -110,10 +128,14 @@ class ObraPerson(Model):
 
 
 class Result(Model):
+    """
+    An individual race result - a Person's place in a specific Race.
+    """
     id = IntegerField(verbose_name='Result ID', primary_key=True)
     race = ForeignKeyField(verbose_name='Result Race', model=Race, backref='results')
     person = ForeignKeyField(verbose_name='Result Person', model=Person, backref='results', null=True)
     place = CharField(verbose_name='Place', index=True)
+    time = IntegerField(verbose_name='Time', null=True)
 
     class Meta:
         database = db
@@ -122,12 +144,15 @@ class Result(Model):
 
 
 class Points(Model):
-    result = ForeignKeyField(verbose_name='Points from Result', model=Result, backref='points', primary_key=True)
+    """
+    Points toward a category upgrade - awarded for a good Result in a Race of a specific size.
+    """
+    result = ForeignKeyField(verbose_name='Result awarding Upgrade Points', model=Result, backref='points', primary_key=True)
     starters = CharField(verbose_name='Starting Field Size', default='?')
-    value = CharField(verbose_name='Points for Place', default='0')
+    value = CharField(verbose_name='Points Earned for Result', default='0')
     notes = CharField(verbose_name='Notes', default='')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
-    sum_value = IntegerField(verbose_name='Current Points', default=0)
+    sum_value = IntegerField(verbose_name='Current Points Sum', default=0)
     sum_categories = JSONField(verbose_name='Current Category', default=[])
 
     class Meta:
