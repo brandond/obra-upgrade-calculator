@@ -21,10 +21,15 @@ RUN /app/venv/bin/pip install --no-deps /usr/src/obra-upgrade-calculator/
 FROM alpine
 RUN apk --no-cache upgrade
 
+LABEL maintainer="Brad Davidson <brad@oatmail.org>"
 RUN apk --no-cache add libxml2 libxslt python3
 COPY --from=builder /app /app
+RUN test ! -e /data && \
+    mkdir /data && \
+    chown guest:users /data || \
+    true
 
-LABEL maintainer="Brad Davidson <brad@oatmail.org>"
+USER guest
 VOLUME ["/data"]
 ENV HOME="/data"
 CMD ["/app/venv/bin/obra-upgrade-calculator"]
