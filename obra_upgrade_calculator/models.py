@@ -11,8 +11,6 @@ from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
                                 DateTimeField, ForeignKeyField, IntegerField)
 from playhouse.sqlite_ext import JSONField
 
-logger = logging.getLogger(__name__)
-logger.info('Using database at {}'.format(expanduser('~/.obra.sqlite3')))
 db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                   pragmas=(('foreign_keys', 'on'),
                            ('page_size', 1024 * 4),
@@ -21,6 +19,9 @@ db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                            ('journal_mode', 'OFF'),
                            ('locking_mode', 'EXCLUSIVE'),
                            ('synchronous', 'OFF')))
+
+logger = logging.getLogger(__name__)
+logger.info('Using local database {} at {}'.format(db, db.database))
 
 
 class Series(Model):
@@ -170,4 +171,3 @@ Person.create_table(fail_silently=True)
 ObraPerson.create_table(fail_silently=True)
 Result.create_table(fail_silently=True)
 Points.create_table(fail_silently=True)
-logging.debug('Using local database {} at {}'.format(db, db.database))
