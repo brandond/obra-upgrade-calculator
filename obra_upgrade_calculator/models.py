@@ -12,6 +12,7 @@ from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
 from playhouse.sqlite_ext import JSONField
 
 logger = logging.getLogger(__name__)
+logger.info('Using database at {}'.format(expanduser('~/.obra.sqlite3')))
 db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                   pragmas=(('foreign_keys', 'on'),
                            ('page_size', 1024 * 4),
