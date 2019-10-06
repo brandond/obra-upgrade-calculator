@@ -111,6 +111,7 @@ def sum_points(upgrade_discipline):
     cat_points = []
     categories = {9}
     upgrade_notes = set()
+    upgrade_date = date(1970, 1, 1)
 
     for result in prefetch(results, Points):
         # Print a sum and reset stats when the person changes
@@ -121,6 +122,7 @@ def sum_points(upgrade_discipline):
             cat_points[:] = []
             categories = {9}
             upgrade_notes.clear()
+            upgrade_date = date(1970, 1, 1)
 
         days_since_race = (date.today() - result.race.date).days
 
@@ -152,6 +154,7 @@ def sum_points(upgrade_discipline):
                 upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
                 cat_points[:] = []
                 categories = {upgrade_category}
+                upgrade_date = result.race.date
             elif (not categories.intersection(result.race.categories) and
                   min(categories) > min(result.race.categories)):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
@@ -168,17 +171,19 @@ def sum_points(upgrade_discipline):
                     upgrade_notes.add(upgrade_note)
                     cat_points[:] = []
                     categories = {max(result.race.categories)}
+                    upgrade_date = result.race.date
             elif (not categories.intersection(result.race.categories) and
                   max(categories) < max(result.race.categories)):
                 # Race category does not overlap with rider category, and the race category is less skilled
                 if is_woman and 'women' not in result.race.name.lower():
                     # Women can race down-category in a men's race
                     pass
-                elif not points_sum():
-                    # All their points expired, probably nobody cares, give them a downgrade
+                elif not points_sum() and (result.race.date - upgrade_date).days > 365:
+                    # All their points expired and it's been a year since they changed categories, probably nobody cares, give them a downgrade
                     upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
                     cat_points[:] = []
                     categories = {min(result.race.categories)}
+                    upgrade_date = result.race.date
                 elif result.points:
                     upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                     result.points[0].value = 0
