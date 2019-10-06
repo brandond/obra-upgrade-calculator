@@ -9,13 +9,14 @@ import requests
 from lxml import html
 from peewee import JOIN, fn
 
-from .models import Event, ObraPerson, Person, Race, Result, Series
+from .models import Event, ObraPerson, Person, Race, Result, Series, db
 from .data import CATEGORY_RE, AGE_RANGE_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
 
 
+@db.atomic()
 def scrape_year(year, discipline):
     """
     Scrape all results for a given year
@@ -96,7 +97,7 @@ def scrape_new():
     query = (Event.select()
                   .join(Race, JOIN.LEFT_OUTER)
                   .group_by(Event.id)
-                  .having(fn.Count(Race.id) == 0))
+                  .having(fn.COUNT(Race.id) == 0))
     for event in query.execute():
         logger.info('Found unscraped Event {}'.format(event.id))
         scrape_event(event)
@@ -119,7 +120,7 @@ def scrape_recent(days):
         logger.info('Found recent Event {} - Results created {}'.format(event.id, event.created))
         scrape_event(event)
 
-
+@db.atomic()
 def scrape_event(event):
     """Scrape Race Results for a single Event"""
     logger.info("Scraping data for Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
@@ -206,6 +207,20 @@ def scrape_event(event):
                        place=result['place'],
                        time=result['time'])
                .execute())
+
+    # Calculate starting field size for scraped races
+    # Count all the DNFs and DQs, but ignore DNS
+    # Not sure how Candi did it but this makes sense to me
+    for race_id, scrape_flag in races.items():
+        if scrape_flag:
+            starters = (Result.select(fn.COUNT(Result.id))
+                              .where(~(Result.place.contains('dns')))
+                              .where(Result.race_id == race_id)
+                              .scalar())
+            logger.info('Counted {} starters for race [{}]'.format(starters, race_id))
+            (Race.update({Race.starters: starters})
+                 .where(Race.id == race_id)
+                 .execute())
 
 
 def find_person(name):

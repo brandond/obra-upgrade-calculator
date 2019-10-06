@@ -177,7 +177,7 @@ class TextOutput(OutputBase):
             '/'.join(str(c) for c in point.sum_categories),
             point.value,
             point.result.place,
-            point.starters,
+            point.result.race.starters,
             point.result.race.event.discipline_title,
             point.result.race.event.name,
             point.result.race.name,
@@ -239,7 +239,7 @@ class JsonOutput(OutputBase):
         self.point_buffer = '        { '
         self.point_buffer += '"place": {}, "starters": {}, "points": {}, "point_total": {}, '.format(
             point.result.place,
-            point.starters,
+            point.result.race.starters,
             point.value,
             point.sum_value)
         self.point_buffer += '"category": "{}", "discipline": "{}", "event": "{}", "race": "{}", "date": "{}", "notes": "{}" '.format(
@@ -268,7 +268,7 @@ class CsvOutput(OutputBase):
     def point(self, point):
         self.output.write('{0},{1:>2},{2:>2},{3:>2},"{4}"\t,"{5}"\t,"{6}"\t,"{7}"\t,"{8}"\t,"{9}"\t,{10},"{11}"\n'.format(
             point.result.place,
-            point.starters,
+            point.result.race.starters,
             point.value,
             point.sum_value,
             point.result.person.first_name,
@@ -285,6 +285,7 @@ OUTPUT_MAP = {'text': TextOutput,
               'html': HtmlOutput,
               'json': JsonOutput,
               'csv': CsvOutput,
+              'null': OutputBase,
               }
 
 

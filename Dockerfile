@@ -3,8 +3,10 @@ RUN apk --no-cache upgrade
 
 RUN apk --no-cache add alpine-sdk libxml2-dev libxslt-dev python3-dev
 RUN python3 -m venv /app/venv
+RUN /app/venv/bin/pip install --upgrade pip
 ARG SQLITE_VERSION=3.28.0
 ARG APSW_VERSION=${SQLITE_VERSION}-r1
+
 ADD https://github.com/rogerbinns/apsw/archive/${APSW_VERSION}.tar.gz /usr/src/
 RUN tar -zxvf /usr/src/${APSW_VERSION}.tar.gz -C /usr/src/
 WORKDIR /usr/src/apsw-${APSW_VERSION}
@@ -24,6 +26,7 @@ RUN apk --no-cache upgrade
 LABEL maintainer="Brad Davidson <brad@oatmail.org>"
 RUN apk --no-cache add libxml2 libxslt python3
 COPY --from=builder /app /app
+COPY docker-entrypoint.sh /
 RUN test ! -e /data && \
     mkdir /data && \
     chown guest:users /data || \
@@ -31,5 +34,6 @@ RUN test ! -e /data && \
 
 USER guest
 VOLUME ["/data"]
-ENV HOME="/data"
+ENV HOME="/data" PIP_NO_CACHE_DIR="off"
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["/app/venv/bin/obra-upgrade-calculator"]

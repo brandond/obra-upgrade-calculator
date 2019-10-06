@@ -16,9 +16,9 @@ db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                            ('page_size', 1024 * 4),
                            ('cache_size', 10000),
                            ('auto_vacuum', 'NONE'),
-                           ('journal_mode', 'OFF'),
-                           ('locking_mode', 'EXCLUSIVE'),
-                           ('synchronous', 'OFF')))
+                           ('journal_mode', 'TRUNCATE'),
+                           ('locking_mode', 'NORMAL'),
+                           ('synchronous', 'NORMAL')))
 
 logger = logging.getLogger(__name__)
 logger.info('Using local database {} at {}'.format(db, db.database))
@@ -68,6 +68,7 @@ class Race(Model):
     name = CharField(verbose_name='Race Name')
     date = DateField(verbose_name='Race Date')
     categories = JSONField(verbose_name='Race Categories')
+    starters = IntegerField(verbose_name='Race Starting Field Size', default=0)
     created = DateTimeField(verbose_name='Results Created')
     updated = DateTimeField(verbose_name='Results Updated')
     event = ForeignKeyField(verbose_name='Race Event', model=Event, backref='races')
@@ -150,7 +151,6 @@ class Points(Model):
     Points toward a category upgrade - awarded for a good Result in a Race of a specific size.
     """
     result = ForeignKeyField(verbose_name='Result awarding Upgrade Points', model=Result, backref='points', primary_key=True)
-    starters = CharField(verbose_name='Starting Field Size', default='?')
     value = CharField(verbose_name='Points Earned for Result', default='0')
     notes = CharField(verbose_name='Notes', default='')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
@@ -163,11 +163,5 @@ class Points(Model):
         only_save_dirty = True
 
 
-db.connect()
-Series.create_table(fail_silently=True)
-Event.create_table(fail_silently=True)
-Race.create_table(fail_silently=True)
-Person.create_table(fail_silently=True)
-ObraPerson.create_table(fail_silently=True)
-Result.create_table(fail_silently=True)
-Points.create_table(fail_silently=True)
+with db.connection_context():
+    db.create_tables([Series, Event, Race, Person, ObraPerson, Result, Points], fail_silently=True)
