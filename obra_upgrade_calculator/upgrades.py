@@ -108,7 +108,7 @@ def sum_points(upgrade_discipline):
     person = None
     is_woman = False
     had_points = False
-    cat_points[:] = []
+    cat_points = []
     categories = {9}
     upgrade_notes = set()
 
@@ -127,7 +127,7 @@ def sum_points(upgrade_discipline):
         def result_points_value():
             return result.points[0].value if result.points else 0
 
-        def points_sum()
+        def points_sum():
             return sum(int(p.value) for p in cat_points)
 
         expired_points = expire_points(cat_points, result.race.date)
