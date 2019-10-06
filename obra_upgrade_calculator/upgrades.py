@@ -134,7 +134,7 @@ def sum_points(upgrade_discipline):
 
         expired_points = expire_points(cat_points, result.race.date)
         if expired_points:
-            upgrade_notes.add('{} POINTS HAVE EXPIRED'.format(expired_points))
+            upgrade_notes.add('{} {} EXPIRED'.format(expired_points, 'POINT HAS' if expired_points == 1 else 'POINTS HAVE'))
 
         # Only process finishes (no dnf/dns/dq) with a known category
         if NUMBER_RE.match(result.place) and result.race.categories:
