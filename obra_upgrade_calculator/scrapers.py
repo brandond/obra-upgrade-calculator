@@ -188,7 +188,8 @@ def scrape_event(event):
             if result['first_name'] and result['last_name']:
                 (Person.insert(id=result['person_id'],
                                first_name=result['first_name'],
-                               last_name=result['last_name'])
+                               last_name=result['last_name'],
+                               team_name=result['team_name'] or '')
                        .on_conflict_replace()
                        .execute())
             else:
@@ -224,7 +225,13 @@ def scrape_event(event):
 
 
 def find_person(name):
-    if ' ' not in name:
+    """
+    Sometimes results come through with the name mangled and a new id.
+    See if we can find an existing person with some combination of their first and last names.
+    """
+    if ' ' in name:
+        name = name.replace(',', '')
+    else:
         return None
 
     try:

@@ -87,6 +87,7 @@ class Person(Model):
     id = IntegerField(verbose_name='Person ID', primary_key=True)
     first_name = CharField(verbose_name='First Name')
     last_name = CharField(verbose_name='Last Name')
+    team_name = CharField(verbose_name='Team Name', default='')
 
     class Meta:
         database = db
