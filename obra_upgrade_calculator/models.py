@@ -140,6 +140,7 @@ class Result(Model):
     person = ForeignKeyField(verbose_name='Result Person', model=Person, backref='results', null=True)
     place = CharField(verbose_name='Place', index=True)
     time = IntegerField(verbose_name='Time', null=True)
+    laps = IntegerField(verbose_name='Laps', null=True)
 
     class Meta:
         database = db

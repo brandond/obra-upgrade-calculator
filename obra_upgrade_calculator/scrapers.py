@@ -206,7 +206,8 @@ def scrape_event(event):
                        race_id=result['race_id'],
                        person_id=result['person_id'],
                        place=result['place'],
-                       time=result['time'])
+                       time=result['time'],
+                       laps=result['laps'])
                .execute())
 
     # Calculate starting field size for scraped races
