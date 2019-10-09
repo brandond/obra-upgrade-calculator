@@ -4,7 +4,7 @@ RUN apk --no-cache upgrade
 RUN apk --no-cache add alpine-sdk libxml2-dev libxslt-dev python3-dev
 RUN python3 -m venv /app/venv
 RUN /app/venv/bin/pip install --upgrade pip
-ARG SQLITE_VERSION=3.28.0
+ARG SQLITE_VERSION=3.29.0
 ARG APSW_VERSION=${SQLITE_VERSION}-r1
 
 ADD https://github.com/rogerbinns/apsw/archive/${APSW_VERSION}.tar.gz /usr/src/
