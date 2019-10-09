@@ -24,7 +24,14 @@ logger = logging.getLogger(__name__)
 logger.info('Using local database {} at {}'.format(db, db.database))
 
 
-class Series(Model):
+class ObraModel(ObraModel):
+    class Meta:
+        database = db
+        without_rowid = True
+        only_save_dirty = True
+
+
+class Series(ObraModel):
     """
     An OBRA race series spanning multiple events over more than one day.
     """
@@ -33,13 +40,8 @@ class Series(Model):
     year = IntegerField(verbose_name='Series Year')
     dates = CharField(verbose_name='Series Months/Days')
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
 
-
-class Event(Model):
+class Event(ObraModel):
     """
     A single race day - may be standalone or part of a series.
     """
@@ -50,17 +52,12 @@ class Event(Model):
     date = CharField(verbose_name='Event Month/Day')
     series = ForeignKeyField(verbose_name='Event Series', model=Series, backref='events', null=True)
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
-
     @property
     def discipline_title(self):
         return self.discipline.replace('_', ' ').title()
 
 
-class Race(Model):
+class Race(ObraModel):
     """
     A single race at an event, with one or more results.
     """
@@ -73,13 +70,8 @@ class Race(Model):
     updated = DateTimeField(verbose_name='Results Updated')
     event = ForeignKeyField(verbose_name='Race Event', model=Event, backref='races')
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
 
-
-class Person(Model):
+class Person(ObraModel):
     """
     A person who participated in a race.
     We maintain our own ID since I don't want to have to scrape all of OBRA's member DB.
@@ -89,13 +81,8 @@ class Person(Model):
     last_name = CharField(verbose_name='Last Name')
     team_name = CharField(verbose_name='Team Name', default='')
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
 
-
-class ObraPerson(Model):
+class ObraPerson(ObraModel):
     """
     An OBRA member.
     OBRA member data is only scraped when necessary to confirm whether or not someone needs an upgrade.
@@ -109,11 +96,6 @@ class ObraPerson(Model):
     road_category = IntegerField(verbose_name='Road Category', default=5)
     track_category = IntegerField(verbose_name='Track Category', default=5)
     updated = DateTimeField(verbose_name='Person Updated')
-
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
 
     def category_for_discipline(self, discipline):
         discipline = discipline.replace('mountain_bike', 'mtb')
@@ -131,7 +113,7 @@ class ObraPerson(Model):
         return datetime.now() - self.updated >= timedelta(days=1)
 
 
-class Result(Model):
+class Result(ObraModel):
     """
     An individual race result - a Person's place in a specific Race.
     """
@@ -142,13 +124,8 @@ class Result(Model):
     time = IntegerField(verbose_name='Time', null=True)
     laps = IntegerField(verbose_name='Laps', null=True)
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
 
-
-class Points(Model):
+class Points(ObraModel):
     """
     Points toward a category upgrade - awarded for a good Result in a Race of a specific size.
     """
@@ -159,11 +136,23 @@ class Points(Model):
     sum_value = IntegerField(verbose_name='Current Points Sum', default=0)
     sum_categories = JSONField(verbose_name='Current Category', default=[])
 
-    class Meta:
-        database = db
-        without_rowid = True
-        only_save_dirty = True
+
+class Rank(ObraModel):
+    """
+    Rank points associated with a Result
+    """
+    result = ForeignKeyField(verbose_name='Rank from Result', model=Result, backref='rank', primary_key=True)
+    value = IntegerField(verbose_name='Rank for Place')
+
+
+class Quality(ObraModel):
+    """
+    Race Quality figures for a Race
+    """
+    race = ForeignKeyField(verbose_name='Quality Race', model=Race, backref='quality')
+    value = IntegerField(verbose_name='Race Quality')
+    points_per_place = IntegerField(verbose_name='Points per Place')
 
 
 with db.connection_context():
-    db.create_tables([Series, Event, Race, Person, ObraPerson, Result, Points], fail_silently=True)
+    db.create_tables([Series, Event, Race, Person, ObraPerson, Result, Points, Rank, Quality], fail_silently=True)
