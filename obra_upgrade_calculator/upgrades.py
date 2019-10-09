@@ -24,7 +24,8 @@ def recalculate_points(upgrade_discipline):
     Create Points for qualifying Results for all Races of this type.
     """
 
-    # Remove any previously calculated points for this event type
+    # Delete all Result data for this discipline and recalc from scratch
+    # FIXME - add incremental support and make complete recalc selectable
     (Points.delete()
            .where(Points.result_id << (Result.select(Result.id)
                                              .join(Race, src=Result)

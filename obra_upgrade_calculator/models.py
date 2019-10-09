@@ -156,3 +156,8 @@ class Quality(ObraModel):
 
 with db.connection_context():
     db.create_tables([Series, Event, Race, Person, ObraPerson, Result, Points, Rank, Quality], fail_silently=True)
+
+    try:
+        db.execute_sql('VACUUM')
+    except Exception as e:
+        logger.warn('Failed to vacuum database: {}'.format(e))
