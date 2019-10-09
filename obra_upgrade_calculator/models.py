@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.info('Using local database {} at {}'.format(db, db.database))
 
 
-class ObraModel(ObraModel):
+class ObraModel(Model):
     class Meta:
         database = db
         without_rowid = True
