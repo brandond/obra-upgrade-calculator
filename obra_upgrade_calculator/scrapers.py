@@ -3,14 +3,14 @@
 from __future__ import unicode_literals
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import requests
 from lxml import html
 from peewee import JOIN, fn
 
-from .models import Event, ObraPerson, Person, Race, Result, Series, db
-from .data import CATEGORY_RE, AGE_RANGE_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
+from .data import AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
+from .models import Event, ObraPersonSnapshot, Person, Race, Result, Series, db
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
@@ -120,6 +120,7 @@ def scrape_recent(days):
         logger.info('Found recent Event {} - Results created {}'.format(event.id, event.created))
         scrape_event(event)
 
+
 @db.atomic()
 def scrape_event(event):
     """Scrape Race Results for a single Event"""
@@ -149,7 +150,6 @@ def scrape_event(event):
             # uploads the new score sheet. Check for an old Race with a different
             # race_id but the same race_name. Theoretically the old results are still
             # in the OBRA DB somewhere?
-            # TODO: Check for Races going away entirely. Not sure this ever happens?
             try:
                 prev_race = (Race.select()
                                  .where(Race.event_id == event.id)
@@ -167,7 +167,7 @@ def scrape_event(event):
                         races[result['race_id']] = False  # Flag to disable result loading
                         continue
                 else:
-                    logger.info('Deleting old Results from this race')
+                    logger.info('Deleting old race [{}]{}'.format(prev_race.id, prev_race.name))
                     prev_race.delete_instance(recursive=True)
 
             (Race.insert(id=result['race_id'],
@@ -224,6 +224,11 @@ def scrape_event(event):
                  .where(Race.id == race_id)
                  .execute())
 
+    # Delete any races not present in the scraped results
+    for prev_race in event.races.select(Race.id, Race.name).where(Race.id.not_in([r for r in races])):
+        logger.info('Deleting orphan race [{}]{}'.format(prev_race.id, prev_race.name))
+        prev_race.delete_instance(recursive=True)
+
 
 def find_person(name):
     """
@@ -256,7 +261,7 @@ def scrape_person(person):
     response = session.get(url)
     response.raise_for_status()
 
-    kwargs = {'person': person, 'updated': datetime.now()}
+    kwargs = {'person': person, 'date': date.today()}
     tree = html.fromstring(response.text)
     for attr in ['license', 'mtb_category', 'dh_category', 'ccx_category', 'road_category', 'track_category']:
         path = '//p[@id="person_{}"]'.format(attr)
@@ -268,9 +273,9 @@ def scrape_person(person):
                 value = 0
             kwargs[attr] = value
 
-    (ObraPerson.insert(**kwargs)
-               .on_conflict_replace()
-               .execute())
+    (ObraPersonSnapshot.insert(**kwargs)
+                       .on_conflict_replace()
+                       .execute())
 
 
 def get_categories(race_name):

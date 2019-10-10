@@ -3,7 +3,6 @@
 from __future__ import unicode_literals
 
 import logging
-from datetime import datetime, timedelta
 from os.path import expanduser
 
 from peewee import BooleanField, Model
@@ -74,7 +73,6 @@ class Race(ObraModel):
 class Person(ObraModel):
     """
     A person who participated in a race.
-    We maintain our own ID since I don't want to have to scrape all of OBRA's member DB.
     """
     id = IntegerField(verbose_name='Person ID', primary_key=True)
     first_name = CharField(verbose_name='First Name')
@@ -82,35 +80,35 @@ class Person(ObraModel):
     team_name = CharField(verbose_name='Team Name', default='')
 
 
-class ObraPerson(ObraModel):
+class ObraPersonSnapshot(ObraModel):
     """
-    An OBRA member.
-    OBRA member data is only scraped when necessary to confirm whether or not someone needs an upgrade.
-    It is also cached for a day for performance purposes.
+    A point in time record of OBRA member data.
+    The OBRA website doesn't make historical data available, so we store a timestamped
+    copy every time we do a lookup. Doesn't help with really old upgrades, but it should
+    be useful going forward.
     """
-    person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra', primary_key=True)
+    id = IntegerField(verbose_name='Scrape ID', primary_key=True)
+    person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
     license = IntegerField(verbose_name='License', null=True)
     mtb_category = IntegerField(verbose_name='MTB Category', default=3)
     dh_category = IntegerField(verbose_name='DH Category', default=3)
     ccx_category = IntegerField(verbose_name='CX Category', default=5)
     road_category = IntegerField(verbose_name='Road Category', default=5)
     track_category = IntegerField(verbose_name='Track Category', default=5)
-    updated = DateTimeField(verbose_name='Person Updated')
+    date = DateField(verbose_name='Scrape Date')
 
     def category_for_discipline(self, discipline):
         discipline = discipline.replace('mountain_bike', 'mtb')
+        discipline = discipline.replace('short_track', 'mtb')
         discipline = discipline.replace('cyclocross', 'ccx')
         discipline = discipline.replace('criterium', 'road')
         discipline = discipline.replace('time_trial', 'road')
         discipline = discipline.replace('circuit', 'road')
         discipline = discipline.replace('gravel', 'road')
+        discipline = discipline.replace('tour', 'road')
         discipline = discipline.replace('downhill', 'dh')
         discipline = discipline.replace('super_d', 'dh')
         return getattr(self, discipline + '_category')
-
-    @property
-    def is_expired(self):
-        return datetime.now() - self.updated >= timedelta(days=1)
 
 
 class Result(ObraModel):
@@ -155,7 +153,7 @@ class Quality(ObraModel):
 
 
 with db.connection_context():
-    db.create_tables([Series, Event, Race, Person, ObraPerson, Result, Points, Rank, Quality], fail_silently=True)
+    db.create_tables([Series, Event, Race, Person, ObraPersonSnapshot, Result, Points, Rank, Quality], fail_silently=True)
 
     try:
         db.execute_sql('VACUUM')

@@ -2,17 +2,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-import re
 import logging
+import re
 from collections import namedtuple
 from datetime import date
 
 from peewee import fn, prefetch
 
-from .models import Event, Person, Points, Race, Result, db
+from .data import (DISCIPLINE_MAP, NAME_RE, NUMBER_RE, SCHEDULE_2018,
+                   SCHEDULE_2019, SCHEDULE_2019_DATE, UPGRADES)
+from .models import Event, ObraPersonSnapshot, Person, Points, Race, Result, db
 from .outputs import get_writer
 from .scrapers import scrape_person
-from .data import NAME_RE, NUMBER_RE, SCHEDULE_2018, SCHEDULE_2019, SCHEDULE_2019_DATE, UPGRADES, DISCIPLINE_MAP
 
 logger = logging.getLogger(__name__)
 Point = namedtuple('Point', 'value,date')
@@ -33,12 +34,11 @@ def recalculate_points(upgrade_discipline):
                                              .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])))
            .execute())
 
-    # Get all races in the last year with a minimum number of starters, filtering out non-eligible fields
+    # Get all categorized races
     query = (Race.select(Race, Event)
                  .join(Event, src=Race)
                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
-                 .where(Race.categories.length() > 0)
-                 .where(Race.starters >= 6))
+                 .where(Race.categories.length() > 0))
 
     for race in query.execute():
         logger.info('Got Race [{}]{}: [{}]{} on {} with {} starters'.format(
@@ -87,6 +87,10 @@ def sum_points(upgrade_discipline):
     tracked historical rider categories, but all you get is a point in time snapshot at
     the time the data is retrieved.
     """
+    # Note that Race IDs don't necessarily imply the actual order that the races occurred
+    # at the event. However, due to the way the site assigns created/updated
+    # values, and the fact that the races are usually listed in order of occurrence in the
+    # spreadsheet that is uploaded, we generally can imply actual order from the timestamps.
     results = (Result.select(Result.id,
                              Result.place,
                              Person,
@@ -104,13 +108,14 @@ def sum_points(upgrade_discipline):
                      .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                      .order_by(Person.last_name.collate('NOCASE').asc(),
                                Person.first_name.collate('NOCASE').asc(),
-                               Race.date.asc()))
+                               Race.date.asc(),
+                               Race.created.asc()))
 
     person = None
     is_woman = False
-    had_points = False
     cat_points = []
     categories = {9}
+    prev_race_categories = []
     upgrade_notes = set()
     upgrade_date = date(1970, 1, 1)
 
@@ -119,13 +124,11 @@ def sum_points(upgrade_discipline):
         if person != result.person:
             person = result.person
             is_woman = False
-            had_points = False
             cat_points[:] = []
             categories = {9}
             upgrade_notes.clear()
+            prev_race_categories[:] = []
             upgrade_date = date(1970, 1, 1)
-
-        days_since_race = (date.today() - result.race.date).days
 
         def result_points_value():
             return result.points[0].value if result.points else 0
@@ -137,10 +140,9 @@ def sum_points(upgrade_discipline):
         if expired_points:
             upgrade_notes.add('{} {} EXPIRED'.format(expired_points, 'POINT HAS' if expired_points == 1 else 'POINTS HAVE'))
 
-        # Only process finishes (no dnf/dns/dq) with a known category
+        # Only process finishes (no dns) with a known category
         if NUMBER_RE.match(result.place) and result.race.categories:
             upgrade_category = max(categories) - 1
-            had_points = had_points or bool(cat_points)
 
             # Don't have any gender information in results, flag person as woman by race participation
             if 'women' in result.race.name.lower():
@@ -150,8 +152,8 @@ def sum_points(upgrade_discipline):
             if   (upgrade_category in result.race.categories and
                   can_upgrade(upgrade_discipline, points_sum(), upgrade_category, len(cat_points)) and
                   needs_upgrade(result.person, upgrade_discipline, points_sum(), categories) and
-                  days_since_race > 14):
-                # Was eligible for and needed an upgrade, and raced in a field that includes the upgrade category, and the race was over 2 weeks ago
+                  prev_race_categories != result.race.categories):
+                # Was eligible for and needed an upgrade, and raced in a different field that includes the upgrade category
                 upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
                 cat_points[:] = []
                 categories = {upgrade_category}
@@ -161,7 +163,20 @@ def sum_points(upgrade_discipline):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
                 if categories == {9}:
                     # First result for this rider, assign rider current race category - which may be multiple, such as 1/2 or 3/4
-                    categories = set(result.race.categories)
+                    if result.race.categories in ([1], [1, 2], [1, 2, 3]):
+                        # If we first saw them racing as a pro they've probably been there for a while.
+                        # Just check the site and assign their category from that.
+                        obra_category = get_obra_data(result.person, result.race.date).category_for_discipline(result.race.event.discipline)
+                        logger.info('OBRA category check: obra={}, race={}'.format(obra_category, result.race.categories))
+                        if obra_category in result.race.categories:
+                            categories = {obra_category}
+                        else:
+                            categories = {max(result.race.categories)}
+                    else:
+                        categories = set(result.race.categories)
+                    # Add a dummy point and note to ensure Points creation
+                    cat_points.append(Point(0, result.race.date))
+                    upgrade_notes.add('')
                 else:
                     # Complain if they don't have enough points or races for the upgrade
                     if can_upgrade(upgrade_discipline, points_sum(), max(result.race.categories), len(cat_points), True):
@@ -169,8 +184,8 @@ def sum_points(upgrade_discipline):
                     else:
                         upgrade_note = 'PREMATURELY '
                     upgrade_note += 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum())
-                    upgrade_notes.add(upgrade_note)
                     cat_points[:] = []
+                    upgrade_notes.add(upgrade_note)
                     categories = {max(result.race.categories)}
                     upgrade_date = result.race.date
             elif (not categories.intersection(result.race.categories) and
@@ -181,8 +196,8 @@ def sum_points(upgrade_discipline):
                     pass
                 elif not points_sum() and (result.race.date - upgrade_date).days > 365:
                     # All their points expired and it's been a year since they changed categories, probably nobody cares, give them a downgrade
-                    upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
                     cat_points[:] = []
+                    upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
                     categories = {min(result.race.categories)}
                     upgrade_date = result.race.date
                 elif result.points:
@@ -192,6 +207,10 @@ def sum_points(upgrade_discipline):
                   len(categories) > 1):
                 # Refine category for rider who'd only been seen in multi-category races
                 categories.intersection_update(result.race.categories)
+                # Add a dummy point and note to ensure Points creation
+                cat_points.append(Point(0, result.race.date))
+                upgrade_notes.add('')
+
         elif result.points:
             logger.warn('Have points for a race with place={} and categories={}'.format(result.place, result.race.categories))
 
@@ -208,23 +227,25 @@ def sum_points(upgrade_discipline):
             result.points[0].save()
 
         if upgrade_notes:
-            if had_points and not result.points:
+            if (len(cat_points) or upgrade_date == result.race.date) and not result.points:
                 result.points = [Points.create(result=result, sum_categories=list(categories), sum_value=points_sum())]
             if result.points:
-                result.points[0].notes = '; '.join(reversed(sorted(upgrade_notes)))
+                result.points[0].notes = '; '.join(reversed(sorted(n.capitalize() for n in upgrade_notes if n)))
                 result.points[0].save()
                 upgrade_notes.clear()
 
-        logger.info('{0}, {1}: {2} points for {3}/{4} at {5}: {6} on {7} ({8} as {9} in {10} {11})'.format(
+        prev_race_categories[:] = result.race.categories
+
+        logger.info('{0}, {1}: {2} points for {3}/{4} at [{5}]{6}: {7} on {8} ({9} in {10} {11})'.format(
             result.person.last_name,
             result.person.first_name,
             result_points_value(),
             result.place,
             result.race.starters,
+            result.race.id,
             result.race.event.name,
             result.race.name,
             result.race.date,
-            len(cat_points),
             '/'.join(str(c) for c in categories),
             '/'.join(str(c) for c in result.race.categories) or '-',
             result.race.event.discipline))
@@ -235,6 +256,9 @@ def print_points(upgrade_discipline, output_format):
     """
     Print out points tally for each Person
     """
+    if output_format == 'null':
+        return
+
     cur_year = date.today().year
     start_date = date(cur_year - 1, 1, 1)
 
@@ -284,7 +308,7 @@ def print_points(upgrade_discipline, output_format):
         writer.start_upgrades()
         for point in upgrades_needed.execute():
             # Confirm that they haven't already been upgraded on the site
-            obra = get_obra_data(point.result.person)
+            obra = get_obra_data(point.result.person, point.result.race.date)
             discipline = point.result.race.event.discipline
             if obra.category_for_discipline(discipline) >= min(point.sum_categories):
                 writer.upgrade(point)
@@ -322,7 +346,7 @@ def get_points_schedule(event_discipline, race):
             if race.starters >= field_size['min'] and race.starters <= field_size['max']:
                 return field_size['points']
     else:
-        logger.warn('No points schedule for event_discipline={} field={} race.date={}'.format(event_discipline, field, race.date))
+        logger.warn('No points schedule for event_discipline={} field={} starters={} date={}'.format(event_discipline, field, race.starters, race.date))
 
     return []
 
@@ -331,13 +355,9 @@ def needs_upgrade(person, upgrade_discipline, points_sum, categories):
     """
     Determine if the rider needs an upgrade for this discipline
     """
-    is_cat_1 = False
-    if categories == {1, 2}:
-        obra = get_obra_data(person)
-        is_cat_1 = obra.category_for_discipline(upgrade_discipline) == 1
-
+    # FIXME - I think MTB has an 'pro/elite' category that maps to 0?
     category = max(categories) - 1
-    if category == 0 or is_cat_1:
+    if category == 0:
         return False
 
     if upgrade_discipline in UPGRADES and category in UPGRADES[upgrade_discipline]:
@@ -367,15 +387,27 @@ def can_upgrade(upgrade_discipline, points_sum, category, num_races, check_min_r
         else:
             return False
     else:
-        raise Exception('No upgrade schedule for upgrade_discipline={}'.format(upgrade_discipline))
+        raise Exception('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
 
 
-def get_obra_data(person):
-    obra = person.obra.get() if person.obra.count() else None
-    if not obra or obra.is_expired:
+def get_obra_data(person, date):
+    """
+    Try to get a snapshot of OBRA data from on or before the given date.
+    If we have data from on or before the requested date, use that.
+    If we have data from some other newer date, use that.
+    If we don't have any data at all, get some.
+    """
+    if person.obra.where(ObraPersonSnapshot.date <= date).count():
+        query = person.obra.order_by(ObraPersonSnapshot.date.desc()).where(ObraPersonSnapshot.date <= date)
+    elif person.obra.count():
+        query = person.obra.order_by(ObraPersonSnapshot.date.asc())
+    else:
         scrape_person(person)
-        obra = person.obra.get()
-    return obra
+        query = person.obra
+
+    data = query.first()
+    logger.info('OBRA Data: data requested={} returned={} for person={}'.format(date, data.date, person.id))
+    return data
 
 
 def expire_points(points, race_date):

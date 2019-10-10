@@ -7,7 +7,7 @@ from datetime import date
 CATEGORY_RE = re.compile(r'(?:^| )(beginner|novice|[a-c]|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
 AGE_RANGE_RE = re.compile(r'([7-9]|1[0-9])(-([7-9]|1[0-9]))?')
 NAME_RE = re.compile("^[a-z.'-]+", flags=re.I)
-NUMBER_RE = re.compile("[0-9]+")
+NUMBER_RE = re.compile("[0-9]+|dnf|dq", flags=re.I)
 
 DISCIPLINE_RE_MAP = {  # patterns within each discipline are ordered by precedence
     'road': [
@@ -130,7 +130,8 @@ UPGRADES = {
         2: {'min': 20, 'max': 20},
         1: {'min': 20, 'max': 35},
     },
-    'mountain': {
+    'mountain_bike': {
+        3: {'podiums': 0},
         2: {'podiums': 3},
         1: {'podiums': 3},
         0: {'podiums': 5},

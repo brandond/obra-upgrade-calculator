@@ -7,8 +7,8 @@ from datetime import date
 
 import click
 
-from .outputs import OUTPUT_MAP
 from .data import DISCIPLINE_MAP
+from .outputs import OUTPUT_MAP
 
 
 @click.command()
