@@ -123,6 +123,7 @@ SCHEDULE_2018 = {
 
 # Minimum points necesary to upgrade to this field.
 # Maximum points after which you are mandatorily upgraded.
+# FIXME - need minimum field size for mtb men/women
 UPGRADES = {
     'cyclocross': {
         4: {'min': 0,  'max': 20},
@@ -130,13 +131,12 @@ UPGRADES = {
         2: {'min': 20, 'max': 20},
         1: {'min': 20, 'max': 35},
     },
-    'mountain_bike': {
-        3: {'podiums': 0},
+    'mountain_bike-FIXME': {
         2: {'podiums': 3},
         1: {'podiums': 3},
         0: {'podiums': 5},
     },
-    'track': {
+    'track-FIXME': {
         4: {'min': 0,  'races': 4},
         3: {'min': 20, 'races': 5},
         2: {'min': 25, 'races': 5},

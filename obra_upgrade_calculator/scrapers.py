@@ -174,7 +174,7 @@ def scrape_event(event):
                          event_id=result['event_id'],
                          name=result['race_name'],
                          date=result['date'],
-                         categories=get_categories(result['race_name']),
+                         categories=get_categories(result['race_name'], event.discipline),
                          created=datetime.strptime(result['created_at'][:19], '%Y-%m-%dT%H:%M:%S'),
                          updated=datetime.strptime(result['updated_at'][:19], '%Y-%m-%dT%H:%M:%S'))
                  .execute())
@@ -186,6 +186,7 @@ def scrape_event(event):
         # Create Person if necessary
         if result['person_id'] and result['person_id'] not in people:
             if result['first_name'] and result['last_name']:
+                # FIXME - on_conflict_update to keep existing team 
                 (Person.insert(id=result['person_id'],
                                first_name=result['first_name'],
                                last_name=result['last_name'],
@@ -278,11 +279,12 @@ def scrape_person(person):
                        .execute())
 
 
-def get_categories(race_name):
+def get_categories(race_name, event_discipline):
     """
     Extract a category list from the race name
     """
     # FIXME - need to handle pro/elite (cat 0) for MTB
+    # FIXME - MTB categories are a disaster and probably need a completely different set of patterns
     cat_match = CATEGORY_RE.search(race_name)
     age_match = AGE_RANGE_RE.search(race_name)
     if age_match:

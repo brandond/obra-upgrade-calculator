@@ -16,7 +16,7 @@ from .outputs import get_writer
 from .scrapers import scrape_person
 
 logger = logging.getLogger(__name__)
-Point = namedtuple('Point', 'value,date')
+Point = namedtuple('Point', 'value,place,date')
 
 
 @db.atomic()
@@ -117,7 +117,7 @@ def sum_points(upgrade_discipline):
     categories = {9}
     prev_race_categories = []
     upgrade_notes = set()
-    upgrade_date = date(1970, 1, 1)
+    upgrade_race = Race(date=date(1970, 1, 1))
 
     for result in prefetch(results, Points):
         # Print a sum and reset stats when the person changes
@@ -128,7 +128,7 @@ def sum_points(upgrade_discipline):
             categories = {9}
             upgrade_notes.clear()
             prev_race_categories[:] = []
-            upgrade_date = date(1970, 1, 1)
+            upgrade_race = Race(date=date(1970, 1, 1))
 
         def result_points_value():
             return result.points[0].value if result.points else 0
@@ -145,19 +145,20 @@ def sum_points(upgrade_discipline):
             upgrade_category = max(categories) - 1
 
             # Don't have any gender information in results, flag person as woman by race participation
+            # I should call this is_not_cis_male or something lol
             if 'women' in result.race.name.lower():
                 is_woman = True
 
             # Here's the goofy category change logic
             if   (upgrade_category in result.race.categories and
-                  can_upgrade(upgrade_discipline, points_sum(), upgrade_category, len(cat_points)) and
-                  needs_upgrade(result.person, upgrade_discipline, points_sum(), categories) and
+                  can_upgrade(upgrade_discipline, points_sum(), upgrade_category, cat_points) and
+                  needs_upgrade(result.person, upgrade_discipline, points_sum(), categories, cat_points) and
                   prev_race_categories != result.race.categories):
                 # Was eligible for and needed an upgrade, and raced in a different field that includes the upgrade category
                 upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
                 cat_points[:] = []
                 categories = {upgrade_category}
-                upgrade_date = result.race.date
+                upgrade_race = result.race
             elif (not categories.intersection(result.race.categories) and
                   min(categories) > min(result.race.categories)):
                 # Race category does not overlap with rider category, and the race cateogory is more skilled
@@ -175,11 +176,10 @@ def sum_points(upgrade_discipline):
                     else:
                         categories = set(result.race.categories)
                     # Add a dummy point and note to ensure Points creation
-                    cat_points.append(Point(0, result.race.date))
                     upgrade_notes.add('')
                 else:
                     # Complain if they don't have enough points or races for the upgrade
-                    if can_upgrade(upgrade_discipline, points_sum(), max(result.race.categories), len(cat_points), True):
+                    if can_upgrade(upgrade_discipline, points_sum(), max(result.race.categories), cat_points, True):
                         upgrade_note = ''
                     else:
                         upgrade_note = 'PREMATURELY '
@@ -187,19 +187,19 @@ def sum_points(upgrade_discipline):
                     cat_points[:] = []
                     upgrade_notes.add(upgrade_note)
                     categories = {max(result.race.categories)}
-                    upgrade_date = result.race.date
+                    upgrade_race = result.race
             elif (not categories.intersection(result.race.categories) and
                   max(categories) < max(result.race.categories)):
                 # Race category does not overlap with rider category, and the race category is less skilled
                 if is_woman and 'women' not in result.race.name.lower():
                     # Women can race down-category in a men's race
                     pass
-                elif not points_sum() and (result.race.date - upgrade_date).days > 365:
+                elif not points_sum() and (result.race.date - upgrade_race.date).days > 365:
                     # All their points expired and it's been a year since they changed categories, probably nobody cares, give them a downgrade
                     cat_points[:] = []
                     upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
                     categories = {min(result.race.categories)}
-                    upgrade_date = result.race.date
+                    upgrade_race = result.race
                 elif result.points:
                     upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
                     result.points[0].value = 0
@@ -207,18 +207,17 @@ def sum_points(upgrade_discipline):
                   len(categories) > 1):
                 # Refine category for rider who'd only been seen in multi-category races
                 categories.intersection_update(result.race.categories)
-                # Add a dummy point and note to ensure Points creation
-                cat_points.append(Point(0, result.race.date))
                 upgrade_notes.add('')
-
         elif result.points:
             logger.warn('Have points for a race with place={} and categories={}'.format(result.place, result.race.categories))
 
-        if result_points_value():
-            cat_points.append(Point(result_points_value(), result.race.date))
+        cat_points.append(Point(result_points_value(), result.place, result.race.date))
+
+        if (upgrade_race == result.race or upgrade_notes) and not result.points:
+            result.points = [Points.create(result=result, value=0)]
 
         if result.points:
-            if needs_upgrade(result.person, upgrade_discipline, points_sum(), categories):
+            if needs_upgrade(result.person, upgrade_discipline, points_sum(), categories, cat_points):
                 upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
 
@@ -226,10 +225,7 @@ def sum_points(upgrade_discipline):
             result.points[0].sum_value = points_sum()
             result.points[0].save()
 
-        if upgrade_notes:
-            if (len(cat_points) or upgrade_date == result.race.date) and not result.points:
-                result.points = [Points.create(result=result, sum_categories=list(categories), sum_value=points_sum())]
-            if result.points:
+            if upgrade_notes:
                 result.points[0].notes = '; '.join(reversed(sorted(n.capitalize() for n in upgrade_notes if n)))
                 result.points[0].save()
                 upgrade_notes.clear()
@@ -351,43 +347,54 @@ def get_points_schedule(event_discipline, race):
     return []
 
 
-def needs_upgrade(person, upgrade_discipline, points_sum, categories):
+def needs_upgrade(person, upgrade_discipline, points_sum, categories, cat_points):
     """
     Determine if the rider needs an upgrade for this discipline
     """
-    # FIXME - I think MTB has an 'pro/elite' category that maps to 0?
     category = max(categories) - 1
-    if category == 0:
-        return False
 
     if upgrade_discipline in UPGRADES and category in UPGRADES[upgrade_discipline]:
-        max_points = UPGRADES[upgrade_discipline][category].get('max')
-        logger.debug('Checking upgrade_discipline={} points_sum={} category={} max_points={}'.format(
-            upgrade_discipline, points_sum, category, max_points))
-        return points_sum >= max_points
+        if 'podiums' in UPGRADES[upgrade_discipline][category]:
+            # FIXME - also need to check field size and gender
+            podiums = UPGRADES[upgrade_discipline][category]['podiums']
+            podium_races = [p for p in cat_points if safe_int(p.place) <= 3]
+            if len(podium_races) >= podiums:
+                return True
+            else:
+                return False
+        else:
+            if category == 0:
+                return False
+            max_points = UPGRADES[upgrade_discipline][category]['max']
+            return points_sum >= max_points
     else:
-        logger.warn('No upgrade schedule for upgrade_discipline={}'.format(upgrade_discipline))
+        logger.warn('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
 
     return False
 
 
-def can_upgrade(upgrade_discipline, points_sum, category, num_races, check_min_races=False):
+def can_upgrade(upgrade_discipline, points_sum, category, cat_points, check_min_races=False):
     """
     Determine if the rider can upgrade to a given category, based on their current points and race count
     """
     if upgrade_discipline in UPGRADES and category in UPGRADES[upgrade_discipline]:
-        min_points = UPGRADES[upgrade_discipline][category].get('min')
-        min_races = UPGRADES[upgrade_discipline][category].get('races')
-        logger.debug('Checking upgrade_discipline={} points_sum={} category={} num_races={} min_points={} min_races={}'.format(
-            upgrade_discipline, points_sum, category, num_races, min_points, min_races))
-        if check_min_races and min_races and num_races >= min_races:
-            return True
-        elif points_sum >= min_points:
-            return True
+        if 'podiums' in UPGRADES[upgrade_discipline][category]:
+            return category > 0
         else:
-            return False
+            min_points = UPGRADES[upgrade_discipline][category].get('min')
+            min_races = UPGRADES[upgrade_discipline][category].get('races')
+            logger.debug('Checking upgrade_discipline={} points_sum={} category={} num_races={} min_points={} min_races={}'.format(
+                upgrade_discipline, points_sum, category, len(cat_points), min_points, min_races))
+            if check_min_races and min_races and len(cat_points) >= min_races:
+                return True
+            elif points_sum >= min_points:
+                return True
+            else:
+                return False
     else:
-        raise Exception('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
+        logger.warn('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
+
+    return True
 
 
 def get_obra_data(person, date):
@@ -408,6 +415,13 @@ def get_obra_data(person, date):
     data = query.first()
     logger.info('OBRA Data: data requested={} returned={} for person={}'.format(date, data.date, person.id))
     return data
+
+
+def safe_int(value):
+    try:
+        return int(value)
+    except Exception:
+        return 999
 
 
 def expire_points(points, race_date):
