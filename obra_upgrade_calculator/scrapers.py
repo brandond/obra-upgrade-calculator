@@ -65,7 +65,7 @@ def scrape_year(year, upgrade_discipline):
                                   date=event_date,
                                   series_id=parent_id)
                           .on_conflict(conflict_target=[Event.id],
-                                       preserve=[Event.name, Event.discipline, Event.Year, Event.date, Event.series],
+                                       preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series],
                                        where=(EXCLUDED.discipline != 'all'))
                           .execute())
                 else:
