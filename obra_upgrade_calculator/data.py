@@ -152,14 +152,10 @@ UPGRADES = {
 }
 
 # Map event disciplines to upgrade schedules
+# Order here is used elsewhere, such as the web UI
 DISCIPLINE_MAP = OrderedDict([
-    ('other',         ['all']),
-    ('road',          ['road', 'circuit', 'criterium', 'gravel', 'time_trial', 'tour']),
-    ('mountain_bike', ['mountain_bike', 'downhill', 'super_d', 'short_track']),
     ('cyclocross',    ['cyclocross']),
+    ('road',          ['road', 'circuit', 'criterium', 'gran_fondo', 'gravel', 'time_trial', 'tour']),
+    ('mountain_bike', ['mountain_bike', 'downhill', 'super_d', 'short_track']),
     ('track',         ['track']),
 ])
-
-# Don't allow scraping 'all' from the CLI, it can only be done immediately
-# before scraping everything else to fix the categories
-DISCIPLINES = [k for k, v in DISCIPLINE_MAP.items() if 'all' not in v]

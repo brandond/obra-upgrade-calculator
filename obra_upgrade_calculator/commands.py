@@ -7,12 +7,12 @@ from datetime import date
 
 import click
 
-from .data import DISCIPLINES
+from .data import DISCIPLINE_MAP
 from .outputs import OUTPUT_MAP
 
 
 @click.command()
-@click.option('--discipline', type=click.Choice(DISCIPLINES), required=True)
+@click.option('--discipline', type=click.Choice(DISCIPLINE_MAP.keys()), required=True)
 @click.option('--output', type=click.Choice(sorted(OUTPUT_MAP.keys())), default='text')
 @click.option('--scrape/--no-scrape', default=True)
 @click.option('--debug/--no-debug', default=False)
