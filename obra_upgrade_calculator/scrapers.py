@@ -7,131 +7,186 @@ from datetime import date, datetime, timedelta
 
 import requests
 from lxml import html
-from peewee import JOIN, fn
+from peewee import EXCLUDED, JOIN, fn
 
 from .data import AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
 from .models import Event, ObraPersonSnapshot, Person, Race, Result, Series, db
 
 session = requests.Session()
 logger = logging.getLogger(__name__)
+baseurl = 'https://obra.org'
 
 
 @db.atomic()
-def scrape_year(year, discipline):
+def scrape_year(year, upgrade_discipline):
     """
-    Scrape all results for a given year
-    Avoid scraping 'all' since it will break scoring
+    Scrape all results for a given year and category
     """
-    logger.info('Getting {} events for {}'.format(discipline, year))
-    url = 'http://obra.org/results/{}/{}'.format(year, discipline)
-    response = session.get(url)
-    response.raise_for_status()
-    tree = html.fromstring(response.text)
-    parent_id = ''
-    parent_name = ''
+    for discipline in DISCIPLINE_MAP[upgrade_discipline]:
+        logger.info('Getting {} events for {}'.format(discipline, year))
+        response = session.get('{}/results/{}/{}'.format(baseurl, year, discipline))
+        response.raise_for_status()
+        tree = html.fromstring(response.text)
+        parent_id = ''
+        parent_name = ''
 
-    for element in tree.xpath('//table[contains(@class,"results_home")]//tr'):
-        # No results early in the year
-        if not element.xpath('td/a'):
-            continue
+        for element in tree.xpath('//table[contains(@class,"results_home")]//tr'):
+            # No results early in the year
+            if not element.xpath('td/a'):
+                continue
 
-        # Extract event names, dates, and IDs from link text
-        event_anchor = element.xpath('td/a')[0]
-        event_date = element.xpath('td[@class="date"]')[0].text
-        event_id = event_anchor.get('href').split('/')[2]
+            # Extract event names, dates, and IDs from link text
+            event_anchor = element.xpath('td/a')[0]
+            event_date = element.xpath('td[@class="date"]')[0].text
+            event_id = event_anchor.get('href').split('/')[2]
 
-        # Series results are linked by date; single events by name
-        if event_date:
-            event_date = event_date.strip()
-            event_name = event_anchor.text
-        else:
-            event_date = event_anchor.text.strip()
-            event_name = parent_name
-
-        event_discipline = get_discipline(event_name, discipline)
-        if not event_discipline:
-            logger.warn('Found Event id={} name={} date={} with blacklisted discipline'.format(event_id, event_name, event_date))
-            continue
-
-        if element.get('class') == 'multi-day-event-child':
-            # multi-day-event-child class used for series events
-            logger.info('Found Event id={} name={} date={} discipline={} with series {}'.format(event_id, event_name, event_date, event_discipline, parent_id))
-            if parent_id:
-                (Event.insert(id=event_id,
-                              name=event_name,
-                              discipline=event_discipline,
-                              year=year,
-                              date=event_date,
-                              series_id=parent_id)
-                      .on_conflict_replace()
-                      .execute())
+            # Series results are linked by date; single events by name
+            if event_date:
+                event_date = event_date.strip()
+                event_name = event_anchor.text
             else:
-                logger.warn('Found multi-day-event-child without a series!')
-        else:
-            if '-' in event_date:
-                # Assume anything with a date range is a series
-                logger.info('Found Series id={} name={} dates={}'.format(event_id, event_name, event_date))
-                (Series.insert(id=event_id,
-                               name=event_name,
-                               year=year,
-                               dates=event_date)
-                       .on_conflict_replace()
-                       .execute())
-                parent_id = event_id
-                parent_name = event_name
+                event_date = event_anchor.text.strip()
+                event_name = parent_name
+
+            event_discipline = get_discipline(event_name, discipline)
+            if not event_discipline:
+                logger.warn('Found Event id={} name={} date={} with blacklisted discipline'.format(event_id, event_name, event_date))
+                continue
+
+            if element.get('class') == 'multi-day-event-child':
+                # multi-day-event-child class used for series events
+                logger.info('Found Event id={} name={} date={} discipline={} with series {}'.format(
+                            event_id, event_name, event_date, event_discipline, parent_id))
+                if parent_id:
+                    (Event.insert(id=event_id,
+                                  name=event_name,
+                                  discipline=event_discipline,
+                                  year=year,
+                                  date=event_date,
+                                  series_id=parent_id)
+                          .on_conflict(conflict_target=[Event.id],
+                                       preserve=[Event.name, Event.discipline, Event.Year, Event.date, Event.series],
+                                       where=(EXCLUDED.discipline != 'all'))
+                          .execute())
+                else:
+                    logger.warn('Found multi-day-event-child without a series!')
             else:
-                # Single date with no parent, must be a standalone event
-                logger.info('Found Event id={} name={} date={} discipline={}'.format(event_id, event_name, event_date, event_discipline))
-                (Event.insert(id=event_id,
-                              name=event_name,
-                              discipline=event_discipline,
-                              year=year,
-                              date=event_date)
-                      .on_conflict_replace()
-                      .execute())
+                if element.get('class') == 'multi-day-event' or '-' in event_date:
+                    # Assume anything with a date range is a series
+                    logger.info('Found Series id={} name={} dates={}'.format(event_id, event_name, event_date))
+                    (Series.insert(id=event_id,
+                                   name=event_name,
+                                   year=year,
+                                   dates=event_date)
+                           .on_conflict_replace()
+                           .execute())
+                    parent_id = event_id
+                    parent_name = event_name
+                else:
+                    # Single date with no parent, must be a standalone event
+                    logger.info('Found Event id={} name={} date={} discipline={}'.format(event_id, event_name, event_date, event_discipline))
+                    (Event.insert(id=event_id,
+                                  name=event_name,
+                                  discipline=event_discipline,
+                                  year=year,
+                                  date=event_date)
+                          .on_conflict_replace()
+                          .execute())
 
 
-def scrape_new():
+@db.atomic()
+def scrape_new(upgrade_discipline):
     """Scrape all Events that do not yet have any Races loaded"""
-    logger.info('Scraping all Events with no Races')
+    logger.info('Scraping all {} Events with no Races'.format(upgrade_discipline))
+    race_count = 0
     query = (Event.select()
-                  .join(Race, JOIN.LEFT_OUTER)
+                  .join(Race, src=Event, join_type=JOIN.LEFT_OUTER)
+                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                   .group_by(Event.id)
                   .having(fn.COUNT(Race.id) == 0))
+
     for event in query.execute():
         logger.info('Found unscraped Event {}'.format(event.id))
-        scrape_event(event)
+        race_count += scrape_event(event)
+
+    return race_count
 
 
-def scrape_recent(days):
+@db.atomic()
+def scrape_recent(upgrade_discipline, days):
     """
     Scrape all events that have had results created in the last N days
     Results frequently change for up to a week afterwards, so it's important to check back.
     """
-    logger.info('Scraping Events with Results created in the last {} days'.format(days))
-    create_threshold = datetime.now() - timedelta(days=days)
+    logger.info('Scraping {} Events Races updated in the last {} days'.format(upgrade_discipline, days))
+    race_count = 0
+    update_threshold = datetime.now() - timedelta(days=days)
     query = (Event.select(Event,
-                          fn.MAX(Race.created).alias('created'))
-                  .join(Race)
-                  .switch(Event)
+                          fn.MAX(Race.updated).alias('updated'))
+                  .join(Race, src=Event)
+                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                   .group_by(Event.id)
-                  .having(Race.created > create_threshold))
+                  .having(Race.updated > update_threshold))
+
     for event in query.execute():
-        logger.info('Found recent Event {} - Results created {}'.format(event.id, event.created))
-        scrape_event(event)
+        logger.info('Found recent Event {} - Results updated {}'.format(event.id, event.updated))
+        race_count += scrape_event(event)
+
+    return race_count
 
 
-@db.atomic()
+def scrape_parent_event(event):
+    """Scrape an event with children events. Not sure how this is different from a series?"""
+    logger.info("Scraping data for parent Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
+    change_count = 0
+    response = session.get('{}/events/{}/results'.format(baseurl, event.id))
+    response.raise_for_status()
+    tree = html.fromstring(response.text)
+
+    for event_anchor in tree.xpath('//div[contains(@class,"child_events")]//a'):
+        event_id = event_anchor.get('href').split('/')[2]
+        event_name = event_anchor.text
+
+        event_discipline = get_discipline(event_name, event.discipline)
+        if not event_discipline:
+            logger.warn('Found Event id={} name={} date={} with blacklisted discipline'.format(event_id, event_name, event.date))
+            continue
+
+        if event.name not in event_name:
+            event_name = '{}: {}'.format(event.name, event_name)
+
+        logger.info('Found child Event id={} name={}'.format(event_id, event_name))
+        (Event.insert(id=event_id,
+                      name=event_name,
+                      discipline=event_discipline,
+                      year=event.year,
+                      date=event.date,
+                      series=event.series)
+              .on_conflict(conflict_target=[Event.id],
+                           preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series],
+                           where=(EXCLUDED.discipline != 'all'))
+              .execute())
+        change_count += scrape_event(Event.get_by_id(event_id))
+
+    return change_count
+
+
 def scrape_event(event):
     """Scrape Race Results for a single Event"""
-    logger.info("Scraping data for Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
-    url = 'http://obra.org/events/{}/results.json'.format(event.id)
-    response = session.get(url)
+    logger.info('Scraping data for Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
+    change_count = 0
+    response = session.get('{}/events/{}/results.json'.format(baseurl, event.id))
     response.raise_for_status()
 
     people = dict()
     races = dict()
     results = response.json()
+
+    # If we get an empty list back, this must be a parent event. Children events can only
+    # be extracted from the HTML, so go scrape that.
+    if not results:
+        return scrape_parent_event(event)
+
     for result in results:
         # Do some preflight checks the first time we see a row with a new race_id
         if result['race_id'] not in races:
@@ -186,12 +241,13 @@ def scrape_event(event):
         # Create Person if necessary
         if result['person_id'] and result['person_id'] not in people:
             if result['first_name'] and result['last_name']:
-                # FIXME - on_conflict_update to keep existing team 
                 (Person.insert(id=result['person_id'],
                                first_name=result['first_name'],
                                last_name=result['last_name'],
                                team_name=result['team_name'] or '')
-                       .on_conflict_replace()
+                       .on_conflict(conflict_target=[Person.id],
+                                    preserve=[Person.team_name, Person.first_name, Person.last_name],
+                                    where=(EXCLUDED.team_name != ''))
                        .execute())
             else:
                 person = find_person(str(result['name']))
@@ -221,6 +277,7 @@ def scrape_event(event):
                               .where(Result.race_id == race_id)
                               .scalar())
             logger.info('Counted {} starters for race [{}]'.format(starters, race_id))
+            change_count += 1
             (Race.update({Race.starters: starters})
                  .where(Race.id == race_id)
                  .execute())
@@ -228,7 +285,11 @@ def scrape_event(event):
     # Delete any races not present in the scraped results
     for prev_race in event.races.select(Race.id, Race.name).where(Race.id.not_in([r for r in races])):
         logger.info('Deleting orphan race [{}]{}'.format(prev_race.id, prev_race.name))
+        change_count += 1
         prev_race.delete_instance(recursive=True)
+
+    logger.info('Event scrape modified {} Races'.format(change_count))
+    return change_count
 
 
 def find_person(name):
@@ -258,8 +319,7 @@ def find_person(name):
 
 def scrape_person(person):
     logger.info('Scraping Person data for {}'.format(person.id))
-    url = 'http://obra.org/people/{}/1900'.format(person.id)
-    response = session.get(url)
+    response = session.get('{}/people/{}/1900'.format(baseurl, person.id))
     response.raise_for_status()
 
     kwargs = {'person': person, 'date': date.today()}

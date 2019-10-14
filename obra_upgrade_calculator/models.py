@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 import logging
 from os.path import expanduser
 
-from peewee import BooleanField, Model
+from peewee import BooleanField, CompositeKey, Model
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
                                 DateTimeField, ForeignKeyField, IntegerField)
 from playhouse.sqlite_ext import JSONField
@@ -87,7 +87,7 @@ class ObraPersonSnapshot(ObraModel):
     copy every time we do a lookup. Doesn't help with really old upgrades, but it should
     be useful going forward.
     """
-    id = IntegerField(verbose_name='Scrape ID', primary_key=True)
+    date = DateField(verbose_name='Scrape Date')
     person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
     license = IntegerField(verbose_name='License', null=True)
     mtb_category = IntegerField(verbose_name='MTB Category', default=3)
@@ -95,7 +95,9 @@ class ObraPersonSnapshot(ObraModel):
     ccx_category = IntegerField(verbose_name='CX Category', default=5)
     road_category = IntegerField(verbose_name='Road Category', default=5)
     track_category = IntegerField(verbose_name='Track Category', default=5)
-    date = DateField(verbose_name='Scrape Date')
+
+    class Meta:
+        primary_key = CompositeKey('date', 'person')
 
     def category_for_discipline(self, discipline):
         discipline = discipline.replace('mountain_bike', 'mtb')

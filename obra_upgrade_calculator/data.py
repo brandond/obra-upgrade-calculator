@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import re
+from collections import OrderedDict
 from datetime import date
 
 CATEGORY_RE = re.compile(r'(?:^| )(beginner|novice|[a-c]|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
@@ -151,9 +152,14 @@ UPGRADES = {
 }
 
 # Map event disciplines to upgrade schedules
-DISCIPLINE_MAP = {
-    'road':          ['road', 'circuit', 'criterium', 'gravel', 'time_trial', 'tour'],
-    'mountain_bike': ['mountain_bike', 'downhill', 'super_d', 'short_track'],
-    'cyclocross':    ['cyclocross'],
-    'track':         ['track'],
-}
+DISCIPLINE_MAP = OrderedDict([
+    ('other',         ['all']),
+    ('road',          ['road', 'circuit', 'criterium', 'gravel', 'time_trial', 'tour']),
+    ('mountain_bike', ['mountain_bike', 'downhill', 'super_d', 'short_track']),
+    ('cyclocross',    ['cyclocross']),
+    ('track',         ['track']),
+])
+
+# Don't allow scraping 'all' from the CLI, it can only be done immediately
+# before scraping everything else to fix the categories
+DISCIPLINES = [k for k, v in DISCIPLINE_MAP.items() if 'all' not in v]
