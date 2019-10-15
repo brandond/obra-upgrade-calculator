@@ -9,7 +9,7 @@ import requests
 from lxml import html
 from peewee import EXCLUDED, JOIN, fn
 
-from .data import AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP
+from .data import AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP, STANDINGS_RE
 from .models import Event, ObraPersonSnapshot, Person, Race, Result, Series, db
 
 session = requests.Session()
@@ -63,8 +63,10 @@ def scrape_year(year, upgrade_discipline):
                                   discipline=event_discipline,
                                   year=year,
                                   date=event_date,
-                                  series_id=parent_id)
-                          .on_conflict_replace()
+                                  series_id=parent_id,
+                                  parent_id=None)
+                          .on_conflict(conflict_target=[Event.id],
+                                       preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series, Event.parent])
                           .execute())
                 else:
                     logger.warn('Found multi-day-event-child without a series!')
@@ -87,9 +89,29 @@ def scrape_year(year, upgrade_discipline):
                                   name=event_name,
                                   discipline=event_discipline,
                                   year=year,
-                                  date=event_date)
-                          .on_conflict_replace()
+                                  date=event_date,
+                                  series_id=None,
+                                  parent_id=None)
+                          .on_conflict(conflict_target=[Event.id],
+                                       preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series, Event.parent])
                           .execute())
+
+
+@db.atomic()
+def scrape_parents(year, upgrade_discipline):
+    """Scrape all Events and check to see if they've got any children"""
+    logger.info('Scraping all {} Events to check for children'.format(upgrade_discipline))
+    event_count = 0
+    query = (Event.select()
+                  .where(Event.year == year)
+                  .where(Event.ignore == False)
+                  .where(Event.parent_id.is_null(True))
+                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline]))
+
+    for event in query.execute():
+        event_count += scrape_parent_event(event)
+
+    return event_count
 
 
 @db.atomic()
@@ -99,6 +121,7 @@ def scrape_new(upgrade_discipline):
     race_count = 0
     query = (Event.select()
                   .join(Race, src=Event, join_type=JOIN.LEFT_OUTER)
+                  .where(Event.ignore == False)
                   .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                   .group_by(Event.id)
                   .having(fn.COUNT(Race.id) == 0))
@@ -122,6 +145,7 @@ def scrape_recent(upgrade_discipline, days):
     query = (Event.select(Event,
                           fn.MAX(Race.updated).alias('updated'))
                   .join(Race, src=Event)
+                  .where(Event.ignore == False)
                   .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                   .group_by(Event.id)
                   .having(Race.updated > update_threshold))
@@ -135,7 +159,7 @@ def scrape_recent(upgrade_discipline, days):
 
 def scrape_parent_event(event):
     """Scrape an event with children events. Not sure how this is different from a series?"""
-    logger.info("Scraping data for parent Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
+    logger.info("Scraping data for potential parent Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
     change_count = 0
     response = session.get('{}/events/{}/results'.format(baseurl, event.id))
     response.raise_for_status()
@@ -154,15 +178,16 @@ def scrape_parent_event(event):
             event_name = '{}: {}'.format(event.name, event_name)
 
         logger.info('Found child Event id={} name={}'.format(event_id, event_name))
-        (Event.insert(id=event_id,
-                      name=event_name,
-                      discipline=event_discipline,
-                      year=event.year,
-                      date=event.date,
-                      series=event.series)
-              .on_conflict_replace()
-              .execute())
-        change_count += scrape_event(Event.get_by_id(event_id))
+        change_count += (Event.insert(id=event_id,
+                                      name=event_name,
+                                      discipline=event_discipline,
+                                      year=event.year,
+                                      date=event.date,
+                                      series_id=event.series_id,
+                                      parent_id=event.id)
+                              .on_conflict(conflict_target=[Event.id],
+                                           preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series, Event.parent])
+                              .execute())
 
     return change_count
 
@@ -170,18 +195,26 @@ def scrape_parent_event(event):
 def scrape_event(event):
     """Scrape Race Results for a single Event"""
     logger.info('Scraping data for Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
-    change_count = 0
+
+    if STANDINGS_RE.search(event.name):
+        logging.warning('Skipping Event: appears to be series points total')
+        event.ignore = True
+        event.save()
+        return Race.delete().where(Race.event_id == event.id).execute()
+
     response = session.get('{}/events/{}/results.json'.format(baseurl, event.id))
     response.raise_for_status()
-
-    people = dict()
-    races = dict()
     results = response.json()
 
-    # If we get an empty list back, this must be a parent event. Children events can only
-    # be extracted from the HTML, so go scrape that.
     if not results:
-        return scrape_parent_event(event)
+        logger.info('Skipping event: has no results!')
+        event.ignore = True
+        event.save()
+        return Race.delete().where(Race.event_id == event.id).execute()
+
+    change_count = 0
+    people = dict()
+    races = dict()
 
     for result in results:
         # Do some preflight checks the first time we see a row with a new race_id
@@ -191,11 +224,6 @@ def scrape_event(event):
             logger.info('Processing Race: [{}]{}: [{}]{}'.format(
                 result['event_id'], result['event_full_name'],
                 result['race_id'], result['race_name']))
-
-            if 'standings' in result['event_full_name'].lower():
-                logging.warning('Skipping Race: Event appears to be series points total')
-                races[result['race_id']] = False
-                continue
 
             # When results are updated, the race_id changes when the offical
             # uploads the new score sheet. Check for an old Race with a different
@@ -228,6 +256,7 @@ def scrape_event(event):
                          categories=get_categories(result['race_name'], event.discipline),
                          created=datetime.strptime(result['created_at'][:19], '%Y-%m-%dT%H:%M:%S'),
                          updated=datetime.strptime(result['updated_at'][:19], '%Y-%m-%dT%H:%M:%S'))
+                 .on_conflict_replace()
                  .execute())
 
         # Skip loading Results if flag is false for this Race

@@ -50,6 +50,8 @@ class Event(ObraModel):
     year = IntegerField(verbose_name='Event Year')
     date = CharField(verbose_name='Event Month/Day')
     series = ForeignKeyField(verbose_name='Event Series', model=Series, backref='events', null=True)
+    parent = ForeignKeyField(verbose_name='Child Events', model='self', backref='children', null=True)
+    ignore = BooleanField(verbose_name='Ignore/Hide Event', default=False)
 
     @property
     def discipline_title(self):
@@ -106,6 +108,7 @@ class ObraPersonSnapshot(ObraModel):
         discipline = discipline.replace('criterium', 'road')
         discipline = discipline.replace('time_trial', 'road')
         discipline = discipline.replace('circuit', 'road')
+        discipline = discipline.replace('gran_fondo', 'road')
         discipline = discipline.replace('gravel', 'road')
         discipline = discipline.replace('tour', 'road')
         discipline = discipline.replace('downhill', 'dh')

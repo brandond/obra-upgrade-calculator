@@ -21,7 +21,7 @@ def cli(discipline, output, scrape, debug):
     logging.basicConfig(level=log_level, format='%(levelname)s:%(module)s.%(funcName)s:%(message)s')
 
     # Import these after setting up logging otherwise we don't get logs
-    from .scrapers import scrape_year, scrape_new, scrape_recent
+    from .scrapers import scrape_year, scrape_new, scrape_parents, scrape_recent
     from .upgrades import recalculate_points, print_points, sum_points
 
     if scrape:
@@ -29,6 +29,7 @@ def cli(discipline, output, scrape, debug):
         cur_year = date.today().year
         for year in range(cur_year - 6, cur_year + 1):
             scrape_year(year, discipline)
+            scrape_parents(year, discipline)
 
         # Load in anything new
         scrape_new(discipline)
