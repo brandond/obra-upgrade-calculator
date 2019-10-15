@@ -455,9 +455,9 @@ def safe_int(value):
 
 def expire_points(points, race_date):
     """
-    Calculate the sum of all points earned more than one year (plus a one-week grace period) ago.
+    Calculate the sum of all points earned more than one year ago.
     Modify the passed list by removing these expired points, and return the previously calculated sum.
     """
-    expired_points = sum(int(p.value) for p in points if (race_date - p.date).days > 372)
-    points[:] = [p for p in points if (race_date - p.date).days <= 372]
+    expired_points = sum(int(p.value) for p in points if (race_date - p.date).days > 365)
+    points[:] = [p for p in points if (race_date - p.date).days <= 365]
     return expired_points
