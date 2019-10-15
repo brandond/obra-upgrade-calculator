@@ -64,9 +64,7 @@ def scrape_year(year, upgrade_discipline):
                                   year=year,
                                   date=event_date,
                                   series_id=parent_id)
-                          .on_conflict(conflict_target=[Event.id],
-                                       preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series],
-                                       where=(EXCLUDED.discipline != 'all'))
+                          .on_conflict_replace()
                           .execute())
                 else:
                     logger.warn('Found multi-day-event-child without a series!')
@@ -162,9 +160,7 @@ def scrape_parent_event(event):
                       year=event.year,
                       date=event.date,
                       series=event.series)
-              .on_conflict(conflict_target=[Event.id],
-                           preserve=[Event.name, Event.discipline, Event.year, Event.date, Event.series],
-                           where=(EXCLUDED.discipline != 'all'))
+              .on_conflict_replace()
               .execute())
         change_count += scrape_event(Event.get_by_id(event_id))
 
