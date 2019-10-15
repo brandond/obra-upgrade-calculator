@@ -9,7 +9,7 @@ CATEGORY_RE = re.compile(r'(?:^| )(beginner|novice|[a-c]|[1-5](?:/[1-5])*)(?: |$
 AGE_RANGE_RE = re.compile(r'([7-9]|1[0-9])(-([7-9]|1[0-9]))?')
 NAME_RE = re.compile("^[a-z.'-]+", flags=re.I)
 NUMBER_RE = re.compile("[0-9]+|dnf|dq", flags=re.I)
-STANDINGS_RE = re.compile("standings|overall|results|totals|order|after stage|qualifying|hot spots|gender|"
+STANDINGS_RE = re.compile("standings|overall|(?<!\d )results|totals|order|after stage|qualifying|hot spots|gender|"
                           "(series|team|individual|april|may|june|july) (series|points|competition|final)", flags=re.I)
 
 DISCIPLINE_RE_MAP = {  # patterns within each discipline are ordered by precedence
