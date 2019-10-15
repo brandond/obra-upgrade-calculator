@@ -242,7 +242,10 @@ def sum_points(upgrade_discipline):
             result.points = [Points.create(result=result, value=0)]
 
         if result.points:
-            if needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points):
+            if ((needed_upgrade() and upgrade_race != result.race) or
+                needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points)):
+                # If they needed an upgrade last time and didn't just get it,
+                # or if they need an upgrade now... mark it
                 upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
 
