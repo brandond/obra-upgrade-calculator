@@ -18,7 +18,8 @@ DISCIPLINE_RE_MAP = {  # patterns within each discipline are ordered by preceden
                                'champion( thursday|ship raceway)|banana belt', flags=re.I)],
         ['criterium', re.compile('crit', flags=re.I)],
         ['time_trial', re.compile(' tt|time trial|climb|uphill|revenge of the disc', flags=re.I)],
-        ['tour', re.compile('tour|fondo|epic|duro|stage', flags=re.I)],
+        ['gran_fondo', re.compile('fondo|epic|duro|roubaix', flags=re.I)],
+        ['tour', re.compile('tour|stage', flags=re.I)],
     ],
 }
 
