@@ -196,13 +196,6 @@ def scrape_event(event):
     """Scrape Race Results for a single Event"""
     logger.info('Scraping data for Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
 
-    if STANDINGS_RE.search(event.name):
-        logging.warning('Skipping Event: appears to be series points total!')
-        event.ignore = True
-        event.save()
-        return Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
-        return Race.delete().where(Race.event_id == event.id).execute()
-
     response = session.get('{}/events/{}/results.json'.format(baseurl, event.id))
     response.raise_for_status()
     results = response.json()
@@ -211,7 +204,7 @@ def scrape_event(event):
         logger.warning('Skipping event: has no results!')
         event.ignore = True
         event.save()
-        return Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
+        Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
         return Race.delete().where(Race.event_id == event.id).execute()
 
     change_count = 0
@@ -317,6 +310,24 @@ def scrape_event(event):
 
     logger.info('Event scrape modified {} Races'.format(change_count))
     return change_count
+
+
+@db.atomic
+def clean_events(year, upgrade_discipline):
+    race_count = 0
+    query = (Event.select()
+                  .where(Event.year == year)
+                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline]))
+
+    for event in query:
+        if STANDINGS_RE.search(event.name):
+            logger.warning('Ignoring Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
+            event.ignore = True
+            event.save()
+            Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
+            race_count += Race.delete().where(Race.event_id == event.id).execute()
+
+    return race_count
 
 
 def find_person(name):

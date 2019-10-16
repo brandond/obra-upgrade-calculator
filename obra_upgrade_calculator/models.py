@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 import logging
 from os.path import expanduser
 
-from peewee import BooleanField, CompositeKey, Model
+from peewee import AutoField, BooleanField, Model
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
                                 DateTimeField, ForeignKeyField, IntegerField)
 from playhouse.sqlite_ext import JSONField
@@ -89,6 +89,7 @@ class ObraPersonSnapshot(ObraModel):
     copy every time we do a lookup. Doesn't help with really old upgrades, but it should
     be useful going forward.
     """
+    id = AutoField(verbose_name='Scrape ID', primary_key=True)
     date = DateField(verbose_name='Scrape Date')
     person = ForeignKeyField(verbose_name='Person', model=Person, backref='obra')
     license = IntegerField(verbose_name='License', null=True)
@@ -99,7 +100,9 @@ class ObraPersonSnapshot(ObraModel):
     track_category = IntegerField(verbose_name='Track Category', default=5)
 
     class Meta:
-        primary_key = CompositeKey('date', 'person')
+        indexes = (
+            (('date', 'person'), True),
+        )
 
     def category_for_discipline(self, discipline):
         discipline = discipline.replace('mountain_bike', 'mtb')
@@ -136,6 +139,7 @@ class Points(ObraModel):
     value = CharField(verbose_name='Points Earned for Result', default='0')
     notes = CharField(verbose_name='Notes', default='')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
+    upgrade_confirmation = ForeignKeyField(verbose_name='Member Data Confirming Upgrade', model=ObraPersonSnapshot, backref='points', null=True)
     sum_value = IntegerField(verbose_name='Current Points Sum', default=0)
     sum_categories = JSONField(verbose_name='Current Category', default=[])
 
