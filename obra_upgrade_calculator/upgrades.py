@@ -166,20 +166,12 @@ def sum_points(upgrade_discipline):
 
             # Here's the goofy category change logic
             if   upgrade_category in result.race.categories and needed_upgrade():
-                # Was eligible for and needed an upgrade as of the previous result
-                if prev_result.race.categories == result.race.categories:
-                    # ... and kept racing in the same field which includes the upgrade category
-                    obra_category = get_obra_data(result.person, result.race.date).category_for_discipline(result.race.event.discipline)
-                    logger.info('OBRA category check: obra={}, upgrade_category={}'.format(obra_category, upgrade_category))
-                    if obra_category <= upgrade_category:
-                        # If they've been upgraded on the site, give them the upgrade.
-                        # The actual upgrade probably happened much later, but we have no idea when so this is the best we can do.
-                        upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
-                        cat_points[:] = []
-                        categories = {upgrade_category}
-                        upgrade_race = result.race
-                else:
-                    # ... and raced in a new field that includes the upgrade category
+                # If the race category includes their upgrade category, and they needed an upgrade as of the previous result
+                obra_category = get_obra_data(result.person, result.race.date).category_for_discipline(result.race.event.discipline)
+                logger.info('OBRA category check: obra={}, upgrade_category={}'.format(obra_category, upgrade_category))
+                if obra_category <= upgrade_category:
+                    # If they've been upgraded on the site, give them the upgrade.
+                    # The actual upgrade probably happened much later, but we have no idea when so this is the best we can do.
                     upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
                     cat_points[:] = []
                     categories = {upgrade_category}
@@ -238,14 +230,15 @@ def sum_points(upgrade_discipline):
 
         cat_points.append(Point(result_points_value(), result.place, result.race.date))
 
-        if (upgrade_race == result.race or upgrade_notes) and not result.points:
+        if (upgrade_race == result.race or upgrade_notes or points_sum()) and not result.points:
+            # Ensure we have a Points record to add notes to if they upgraded, have notes, or have running points
             result.points = [Points.create(result=result, value=0)]
 
         if result.points:
-            if ((needed_upgrade() and upgrade_race != result.race) or
+            if ((needed_upgrade() and can_upgrade(upgrade_discipline, points_sum(), upgrade_category, cat_points) and upgrade_race != result.race) or
                 needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points)):
-                # If they needed an upgrade last time and didn't just get it,
-                # or if they need an upgrade now... mark it
+                # If they needed an upgrade last time, and still can upgrade, but didn't upgrade yet...
+                # Or if they need an upgrade now...
                 upgrade_notes.add('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
 

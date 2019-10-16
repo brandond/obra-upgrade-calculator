@@ -197,9 +197,10 @@ def scrape_event(event):
     logger.info('Scraping data for Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
 
     if STANDINGS_RE.search(event.name):
-        logging.warning('Skipping Event: appears to be series points total')
+        logging.warning('Skipping Event: appears to be series points total!')
         event.ignore = True
         event.save()
+        return Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
         return Race.delete().where(Race.event_id == event.id).execute()
 
     response = session.get('{}/events/{}/results.json'.format(baseurl, event.id))
@@ -207,9 +208,10 @@ def scrape_event(event):
     results = response.json()
 
     if not results:
-        logger.info('Skipping event: has no results!')
+        logger.warning('Skipping event: has no results!')
         event.ignore = True
         event.save()
+        return Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
         return Race.delete().where(Race.event_id == event.id).execute()
 
     change_count = 0
