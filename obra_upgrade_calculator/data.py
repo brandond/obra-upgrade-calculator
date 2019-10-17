@@ -5,7 +5,7 @@ import re
 from collections import OrderedDict
 from datetime import date
 
-CATEGORY_RE = re.compile(r'(?:^| )(beginner|novice|[a-c]|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
+CATEGORY_RE = re.compile(r'(?:^| )(beginner|novice|[a-c](?:/[a-c])*|[1-5](?:/[1-5])*)(?: |$)', flags=re.I)
 AGE_RANGE_RE = re.compile(r'([7-9]|1[0-9])(-([7-9]|1[0-9]))?')
 NAME_RE = re.compile(r'^[a-z.\'-]+', flags=re.I)
 NUMBER_RE = re.compile(r'[0-9]+|dnf|dq', flags=re.I)

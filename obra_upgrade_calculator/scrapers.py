@@ -9,7 +9,8 @@ import requests
 from lxml import html
 from peewee import EXCLUDED, JOIN, fn
 
-from .data import AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP, DISCIPLINE_RE_MAP, STANDINGS_RE
+from .data import (AGE_RANGE_RE, CATEGORY_RE, DISCIPLINE_MAP,
+                   DISCIPLINE_RE_MAP, STANDINGS_RE)
 from .models import Event, ObraPersonSnapshot, Person, Race, Result, Series, db
 
 session = requests.Session()
@@ -285,6 +286,7 @@ def scrape_event(event):
                        place=result['place'],
                        time=result['time'],
                        laps=result['laps'])
+               .on_conflict_replace()
                .execute())
 
     # Calculate starting field size for scraped races
@@ -312,7 +314,7 @@ def scrape_event(event):
     return change_count
 
 
-@db.atomic
+@db.atomic()
 def clean_events(year, upgrade_discipline):
     race_count = 0
     query = (Event.select()
@@ -321,7 +323,7 @@ def clean_events(year, upgrade_discipline):
 
     for event in query:
         if STANDINGS_RE.search(event.name):
-            logger.warning('Ignoring Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
+            logger.info('Ignoring Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
             event.ignore = True
             event.save()
             Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
@@ -388,15 +390,19 @@ def get_categories(race_name, event_discipline):
     if age_match:
         return []
     elif cat_match:
-        cats = cat_match.group(1)
-        if cats.lower() in ['beginner', 'novice']:
+        cats = cat_match.group(1).lower()
+        if cats in ['beginner', 'novice']:
             cats = '5'
-        elif cats.lower() == 'c':
+        elif cats == 'c':
             cats = '4'
-        elif cats.lower() == 'b':
+        elif cats == 'b':
             cats = '3'
-        elif cats.lower() == 'a':
+        elif cats == 'a':
             cats = '1/2'
+        elif cats == 'a/b':
+            cats = '1/2/3'
+        elif cats == 'b/c':
+            cats = '3/4'
         return [int(c) for c in cats.split('/')]
     else:
         return []

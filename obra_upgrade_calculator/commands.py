@@ -22,7 +22,7 @@ def cli(discipline, output, scrape, debug):
 
     # Import these after setting up logging otherwise we don't get logs
     from .scrapers import clean_events, scrape_year, scrape_new, scrape_parents, scrape_recent
-    from .upgrades import recalculate_points, print_points, sum_points
+    from .upgrades import confirm_pending_upgrades, recalculate_points, print_points, sum_points
 
     if scrape:
         # Scrape last 5 years of results
@@ -41,6 +41,7 @@ def cli(discipline, output, scrape, debug):
     # Calculate points from new data
     if recalculate_points(discipline, incremental=False):
         sum_points(discipline)
+        confirm_pending_upgrades(discipline)
 
     # Finally, output data
     print_points(discipline, output)

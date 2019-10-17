@@ -7,11 +7,12 @@ import re
 from collections import namedtuple
 from datetime import date
 
-from peewee import JOIN, fn, prefetch
+from peewee import JOIN, Window, fn, prefetch
 
 from .data import (DISCIPLINE_MAP, NAME_RE, NUMBER_RE, SCHEDULE_2018,
                    SCHEDULE_2019, SCHEDULE_2019_DATE, UPGRADES)
-from .models import Event, ObraPersonSnapshot, Person, Points, Race, Result, db
+from .models import (Event, ObraPersonSnapshot, PendingUpgrade, Person, Points,
+                     Race, Result, db)
 from .outputs import get_writer
 from .scrapers import scrape_person
 
@@ -120,8 +121,7 @@ def sum_points(upgrade_discipline):
                      .join(Race, src=Result)
                      .join(Event, src=Race)
                      .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
-                     .order_by(Person.last_name.collate('NOCASE').asc(),
-                               Person.first_name.collate('NOCASE').asc(),
+                     .order_by(Person.id.asc(),
                                Race.date.asc(),
                                Race.created.asc()))
 
@@ -129,17 +129,28 @@ def sum_points(upgrade_discipline):
     is_woman = False
     cat_points = []
     categories = {9}
-    upgrade_notes = set()
+    upgrade_notes = []
     upgrade_race = Race(date=date(1970, 1, 1))
 
     for result in prefetch(results, Points):
         # Reset stats when the person changes
-        if prev_result.person != result.person:
+        if prev_result.person == result.person:
+            if prev_result.race == result.race:
+                logger.warn('{0}, {1}: {2}/{3} at [{4}]{5} - Ignoring duplicate results in same race'.format(
+                            result.person.last_name,
+                            result.person.first_name,
+                            result.place,
+                            result.race.starters,
+                            result.race.id,
+                            result.race.name))
+                prev_result = result
+                continue
+        else:
             prev_result = null_result
             is_woman = False
             cat_points[:] = []
             categories = {9}
-            upgrade_notes.clear()
+            upgrade_notes[:] = []
             upgrade_race = Race(date=date(1970, 1, 1))
 
         def result_points_value():
@@ -153,7 +164,7 @@ def sum_points(upgrade_discipline):
 
         expired_points = expire_points(cat_points, result.race.date)
         if expired_points:
-            upgrade_notes.add('{} {} EXPIRED'.format(expired_points, 'POINT HAS' if expired_points == 1 else 'POINTS HAVE'))
+            upgrade_notes.append('{} {} EXPIRED'.format(expired_points, 'POINT HAS' if expired_points == 1 else 'POINTS HAVE'))
 
         # Only process finishes (no dns) with a known category
         if NUMBER_RE.match(result.place) and result.race.categories:
@@ -168,11 +179,11 @@ def sum_points(upgrade_discipline):
             if   upgrade_category in result.race.categories and needed_upgrade():
                 # If the race category includes their upgrade category, and they needed an upgrade as of the previous result
                 obra_category = get_obra_data(result.person, result.race.date).category_for_discipline(result.race.event.discipline)
-                logger.info('OBRA category check: obra={}, upgrade_category={}'.format(obra_category, upgrade_category))
+                logger.debug('OBRA category check: obra={}, upgrade_category={}'.format(obra_category, upgrade_category))
                 if obra_category <= upgrade_category:
                     # If they've been upgraded on the site, give them the upgrade.
                     # The actual upgrade probably happened much later, but we have no idea when so this is the best we can do.
-                    upgrade_notes.add('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
+                    upgrade_notes.append('UPGRADED TO {} WITH {} POINTS'.format(upgrade_category, points_sum()))
                     cat_points[:] = []
                     categories = {upgrade_category}
                     upgrade_race = result.race
@@ -185,7 +196,7 @@ def sum_points(upgrade_discipline):
                         # If we first saw them racing as a pro they've probably been there for a while.
                         # Just check the site and assign their category from that.
                         obra_category = get_obra_data(result.person, result.race.date).category_for_discipline(result.race.event.discipline)
-                        logger.info('OBRA category check: obra={}, race={}'.format(obra_category, result.race.categories))
+                        logger.debug('OBRA category check: obra={}, race={}'.format(obra_category, result.race.categories))
                         if obra_category in result.race.categories:
                             categories = {obra_category}
                         else:
@@ -193,7 +204,7 @@ def sum_points(upgrade_discipline):
                     else:
                         categories = set(result.race.categories)
                     # Add a dummy point and note to ensure Points creation
-                    upgrade_notes.add('')
+                    upgrade_notes.append('')
                 else:
                     # Complain if they don't have enough points or races for the upgrade
                     if can_upgrade(upgrade_discipline, points_sum(), max(result.race.categories), cat_points, True):
@@ -202,7 +213,7 @@ def sum_points(upgrade_discipline):
                         upgrade_note = 'PREMATURELY '
                     upgrade_note += 'UPGRADED TO {} WITH {} POINTS'.format(max(result.race.categories), points_sum())
                     cat_points[:] = []
-                    upgrade_notes.add(upgrade_note)
+                    upgrade_notes.append(upgrade_note)
                     categories = {max(result.race.categories)}
                     upgrade_race = result.race
             elif (not categories.intersection(result.race.categories) and
@@ -214,17 +225,17 @@ def sum_points(upgrade_discipline):
                 elif not points_sum() and (result.race.date - upgrade_race.date).days > 365:
                     # All their points expired and it's been a year since they changed categories, probably nobody cares, give them a downgrade
                     cat_points[:] = []
-                    upgrade_notes.add('DOWNGRADED TO {}'.format(min(result.race.categories)))
+                    upgrade_notes.append('DOWNGRADED TO {}'.format(min(result.race.categories)))
                     categories = {min(result.race.categories)}
                     upgrade_race = result.race
                 elif result.points:
-                    upgrade_notes.add('NO POINTS FOR RACING BELOW CATEGORY')
+                    upgrade_notes.append('NO POINTS FOR RACING BELOW CATEGORY')
                     result.points[0].value = 0
             elif (len(categories.intersection(result.race.categories)) < len(categories) and
                   len(categories) > 1):
                 # Refine category for rider who'd only been seen in multi-category races
                 categories.intersection_update(result.race.categories)
-                upgrade_notes.add('')
+                upgrade_notes.append('')
         elif result.points:
             logger.warn('Have points for a race with place={} and categories={}'.format(result.place, result.race.categories))
 
@@ -239,15 +250,18 @@ def sum_points(upgrade_discipline):
                 needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points)):
                 # If they needed an upgrade last time, and still can upgrade, but didn't upgrade yet...
                 # Or if they need an upgrade now...
-                upgrade_notes.add('NEEDS UPGRADE')
+                upgrade_notes.append('NEEDS UPGRADE')
                 result.points[0].needs_upgrade = True
 
             result.points[0].sum_categories = list(categories)
             result.points[0].sum_value = points_sum()
 
+            if upgrade_race == result.race:
+                confirm_category_change(result, upgrade_notes)
+
             if upgrade_notes:
                 result.points[0].notes = '; '.join(reversed(sorted(n.capitalize() for n in upgrade_notes if n)))
-                upgrade_notes.clear()
+                upgrade_notes[:] = []
 
             result.points[0].save()
 
@@ -267,6 +281,62 @@ def sum_points(upgrade_discipline):
             '/'.join(str(c) for c in result.race.categories) or '-',
             result.race.event.discipline,
             result.points[0].notes if result.points else ''))
+
+
+@db.atomic()
+def confirm_pending_upgrades(upgrade_discipline):
+    """
+    Since upgrades are recognized the next race after they're earned,
+    we don't have a good way of suppressing them if someone is upgraded
+    on the OBRA website but don't race again.
+    Work around that by creating a PendingUpgrade record that will mark it until they race again.
+    """
+    logger.info('Checking for confirmed upgrades - upgrade_discipline={}'.format(upgrade_discipline))
+    (PendingUpgrade.delete()
+                   .where(PendingUpgrade.discipline == upgrade_discipline)
+                   .execute())
+
+    last_result = (Result.select()
+                         .join(Race, src=Result)
+                         .join(Event, src=Race)
+                         .join(Person, src=Result)
+                         .where(Race.categories.length() > 0)
+                         .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
+                         .select(fn.DISTINCT(fn.FIRST_VALUE(Result.id)
+                                               .over(partition_by=[Result.person_id],
+                                                     order_by=[Race.date.desc(), Race.created.desc()],
+                                                     start=Window.preceding()
+                                                     )
+                                             ).alias('first_id')))
+
+    query = (Result.select(Result,
+                           Race,
+                           Event,
+                           Person,
+                           Points)
+                   .join(Race, src=Result)
+                   .join(Event, src=Race)
+                   .join(Person, src=Result)
+                   .join(Points, src=Result)
+                   .where(Result.id << last_result)
+                   .where(Points.needs_upgrade == True)
+                   .where(~(Race.name.contains('Junior')))
+                   .order_by(Points.sum_categories.asc(),
+                             Points.sum_value.desc()))
+
+    for result in query.prefetch(Points):
+        result.points[0].sum_categories = [min(result.points[0].sum_categories) - 1]
+        confirm_category_change(result, ['UPGRADED'])
+        if result.points[0].upgrade_confirmation_id:
+            logger.debug('Confirmed pending upgrade for {}, {} to {}'.format(
+                result.person.last_name,
+                result.person.first_name,
+                result.points[0].sum_categories[0]))
+            (PendingUpgrade.insert(result_id=result.id,
+                                   upgrade_confirmation_id=result.points[0].upgrade_confirmation_id,
+                                   discipline=upgrade_discipline)
+                           .on_conflict_replace()
+                           .execute())
 
 
 @db.atomic()
@@ -389,7 +459,7 @@ def needs_upgrade(person, upgrade_discipline, points_sum, category, cat_points):
             logger.debug('Returning {} (max_points)'.format(points_sum >= max_points))
             return points_sum >= max_points
     else:
-        logger.warn('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
+        logger.debug('No upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
 
     return False
 
@@ -438,7 +508,7 @@ def get_obra_data(person, date):
         query = person.obra
 
     data = query.first()
-    logger.info('OBRA Data: data requested={} returned={} for person={}'.format(date, data.date, person.id))
+    logger.debug('OBRA Data: data requested={} returned={} for person={}'.format(date, data.date, person.id))
     return data
 
 
@@ -457,3 +527,25 @@ def expire_points(points, race_date):
     expired_points = sum(int(p.value) for p in points if (race_date - p.date).days > 365)
     points[:] = [p for p in points if (race_date - p.date).days <= 365]
     return expired_points
+
+
+def confirm_category_change(result, notes):
+    """Check the site to see if an upgrade or downgrade has been recognized there"""
+    obra_data = get_obra_data(result.person, result.race.date)
+    obra_category = obra_data.category_for_discipline(result.race.event.discipline)
+    result_category = min(result.points[0].sum_categories)
+
+    for i, note in enumerate(notes):
+        if 'UPGRADED' in note:
+            logger.debug('Confirming {}'.format(note))
+            if obra_category <= result_category:
+                result.points[0].upgrade_confirmation_id = obra_data.id
+                notes[i] += ' (CONFIRMED {})'.format(obra_data.date)
+            break
+
+        if 'DOWNGRADED' in note:
+            logger.debug('Confirming {}'.format(note))
+            if obra_category >= result_category:
+                result.points[0].upgrade_confirmation_id = obra_data.id
+                notes[i] += ' (CONFIRMED {})'.format(obra_data.date)
+            break
