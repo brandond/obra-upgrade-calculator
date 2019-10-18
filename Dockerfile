@@ -1,6 +1,7 @@
 FROM alpine AS tester
 RUN apk --no-cache upgrade
 RUN apk --no-cache add python3
+
 RUN python3 -m venv /app/venv
 RUN /app/venv/bin/pip install --upgrade pip
 RUN /app/venv/bin/pip install --upgrade flake8
@@ -10,9 +11,10 @@ RUN /app/venv/bin/flake8 /usr/src/obra-upgrade-calculator
 
 FROM alpine AS builder
 RUN apk --no-cache upgrade
-
-RUN apk --no-cache add alpine-sdk libxml2-dev libxslt-dev python3-dev
+RUN apk --no-cache add alpine-sdk python3-dev
 RUN python3 -m venv /app/venv
+
+RUN apk --no-cache add libxml2-dev libxslt-dev
 RUN /app/venv/bin/pip install --upgrade pip
 ARG SQLITE_VERSION=3.29.0
 ARG APSW_VERSION=${SQLITE_VERSION}-r1
@@ -32,10 +34,10 @@ RUN /app/venv/bin/pip install --no-deps /usr/src/obra-upgrade-calculator/
 
 FROM alpine
 RUN apk --no-cache upgrade
+RUN apk --no-cache add libxml2 libxslt python3
 
 LABEL maintainer="Brad Davidson <brad@oatmail.org>"
-RUN apk --no-cache add libxml2 libxslt python3
-COPY --from=builder /app /app
+COPY --chown=guest:users --from=builder /app/ /app/
 COPY docker-entrypoint.sh /
 RUN test ! -e /data && \
     mkdir /data && \
@@ -44,6 +46,6 @@ RUN test ! -e /data && \
 
 USER guest
 VOLUME ["/data"]
-ENV HOME="/data" PIP_NO_CACHE_DIR="off"
+ENV HOME="/data"
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["/app/venv/bin/obra-upgrade-calculator"]

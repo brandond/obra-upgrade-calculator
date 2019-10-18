@@ -79,7 +79,8 @@ def scrape_year(year, upgrade_discipline):
                                    name=event_name,
                                    year=year,
                                    dates=event_date)
-                           .on_conflict_replace()
+                           .on_conflict(conflict_target=[Series.id],
+                                        preserve=[Series.name, Series.year, Series.dates])
                            .execute())
                     parent_id = event_id
                     parent_name = event_name
@@ -99,14 +100,24 @@ def scrape_year(year, upgrade_discipline):
 
 
 def scrape_parents(year, upgrade_discipline):
-    """Scrape all Events and check to see if they've got any children"""
-    logger.info('Scraping all {} Events to check for children'.format(upgrade_discipline))
+    """
+    Scrape all events once to check to see if they've got any children.
+    Unscraped races are not ignored, not a child of another event, not parent to another event, and don't have any races.
+    This assumes that additional child events don't show up later.
+    """
+    logger.info('Scraping {} Events to check for children'.format(upgrade_discipline))
     event_count = 0
     query = (Event.select()
+                  .join(Race, src=Event, join_type=JOIN.LEFT_OUTER)
                   .where(Event.year == year)
                   .where(Event.ignore == False)
                   .where(Event.parent_id.is_null(True))
-                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline]))
+                  .where(Event.id.not_in(Event.select(Event.parent_id)
+                                              .where(Event.year == year)
+                                              .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])))
+                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
+                  .group_by(Event.id)
+                  .having(fn.COUNT(Race.id) == 0))
 
     for event in query.execute():
         event_count += scrape_parent_event(event)
@@ -118,16 +129,16 @@ def scrape_new(upgrade_discipline):
     """Scrape all Events that do not yet have any Races loaded"""
     logger.info('Scraping all {} Events with no Races'.format(upgrade_discipline))
     race_count = 0
-    query = (Event.select(Event, fn.COUNT(Race.id).alias('race_count'))
+    query = (Event.select()
                   .join(Race, src=Event, join_type=JOIN.LEFT_OUTER)
                   .where(Event.ignore == False)
                   .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
-                  .group_by(Event))
+                  .group_by(Event.id)
+                  .having(fn.COUNT(Race.id) == 0))
 
-    for event in query.execute():
-        logger.info('Found Event [{}]{} with {} races'.format(event.id, event.name, event.race_count))
-        if event.race_count == 0:
-            race_count += scrape_event(event)
+    for event in query:
+        logger.info('Found Event [{}]{} with 0 races'.format(event.id, event.name))
+        race_count += scrape_event(event)
 
     return race_count
 
@@ -201,7 +212,7 @@ def scrape_event(event):
     results = response.json()
 
     if not results:
-        logger.warning('Skipping event: has no results!')
+        logger.warning('Skipping and ignoring Event: has no results!')
         event.ignore = True
         event.save()
         Result.delete().where(Result.race_id << (Race.select(Race.id).where(Race.event_id == event.id))).execute()
@@ -251,7 +262,6 @@ def scrape_event(event):
                          categories=get_categories(result['race_name'], event.discipline),
                          created=datetime.strptime(result['created_at'][:19], '%Y-%m-%dT%H:%M:%S'),
                          updated=datetime.strptime(result['updated_at'][:19], '%Y-%m-%dT%H:%M:%S'))
-                 .on_conflict_replace()
                  .execute())
 
         # Skip loading Results if flag is false for this Race
@@ -285,7 +295,6 @@ def scrape_event(event):
                        place=result['place'],
                        time=result['time'],
                        laps=result['laps'])
-               .on_conflict_replace()
                .execute())
 
     # Calculate starting field size for scraped races
@@ -356,6 +365,7 @@ def find_person(name):
     return None
 
 
+@db.savepoint()
 def scrape_person(person):
     logger.info('Scraping Person data for {}'.format(person.id))
     response = session.get('{}/people/{}/1900'.format(baseurl, person.id))
@@ -374,7 +384,6 @@ def scrape_person(person):
             kwargs[attr] = value
 
     (ObraPersonSnapshot.insert(**kwargs)
-                       .on_conflict_replace()
                        .execute())
 
 

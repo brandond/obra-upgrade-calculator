@@ -12,13 +12,10 @@ from playhouse.sqlite_ext import JSONField
 
 db = APSWDatabase(expanduser('~/.obra.sqlite3'),
                   pragmas=(('foreign_keys', 'on'),
-                           ('page_size', 1024 * 4),
-                           ('cache_size', 10000),
                            ('auto_vacuum', 'NONE'),
                            ('journal_mode', 'WAL'),
                            ('locking_mode', 'NORMAL'),
-                           ('synchronous', 'NORMAL'),
-                           ('temp_store', 'MEMORY')))
+                           ('synchronous', 'NORMAL')))
 
 logger = logging.getLogger(__name__)
 logger.info('Using local database {} at {}'.format(db, db.database))
@@ -51,9 +48,9 @@ class Event(ObraModel):
     year = IntegerField(verbose_name='Event Year')
     date = CharField(verbose_name='Event Month/Day')
     series = ForeignKeyField(verbose_name='Event Series',
-                             model=Series, backref='events', on_update='CASCADE', on_delete='CASCADE', null=True)
+                             model=Series, backref='events', on_update='RESTRICT', on_delete='RESTRICT', null=True)
     parent = ForeignKeyField(verbose_name='Child Events',
-                             model='self', backref='children', on_update='CASCADE', on_delete='CASCADE', null=True)
+                             model='self', backref='children', on_update='RESTRICT', on_delete='RESTRICT', null=True)
     ignore = BooleanField(verbose_name='Ignore/Hide Event', default=False)
 
     @property
@@ -73,7 +70,7 @@ class Race(ObraModel):
     created = DateTimeField(verbose_name='Results Created')
     updated = DateTimeField(verbose_name='Results Updated')
     event = ForeignKeyField(verbose_name='Race Event',
-                            model=Event, backref='races', on_update='CASCADE', on_delete='CASCADE')
+                            model=Event, backref='races', on_update='RESTRICT', on_delete='RESTRICT')
 
 
 class Person(ObraModel):
@@ -96,7 +93,7 @@ class ObraPersonSnapshot(ObraModel):
     id = AutoField(verbose_name='Scrape ID', primary_key=True)
     date = DateField(verbose_name='Scrape Date')
     person = ForeignKeyField(verbose_name='Person',
-                             model=Person, backref='obra', on_update='CASCADE', on_delete='CASCADE')
+                             model=Person, backref='obra', on_update='RESTRICT', on_delete='RESTRICT')
     license = IntegerField(verbose_name='License', null=True)
     mtb_category = IntegerField(verbose_name='MTB Category', default=3)
     dh_category = IntegerField(verbose_name='DH Category', default=3)
@@ -130,9 +127,9 @@ class Result(ObraModel):
     """
     id = IntegerField(verbose_name='Result ID', primary_key=True)
     race = ForeignKeyField(verbose_name='Result Race',
-                           model=Race, backref='results', on_update='CASCADE', on_delete='CASCADE')
+                           model=Race, backref='results', on_update='RESTRICT', on_delete='RESTRICT')
     person = ForeignKeyField(verbose_name='Result Person',
-                             model=Person, backref='results', on_update='CASCADE', on_delete='CASCADE', null=True)
+                             model=Person, backref='results', on_update='RESTRICT', on_delete='RESTRICT', null=True)
     place = CharField(verbose_name='Place', index=True)
     time = IntegerField(verbose_name='Time', null=True)
     laps = IntegerField(verbose_name='Laps', null=True)
@@ -143,7 +140,7 @@ class Points(ObraModel):
     Points toward a category upgrade - awarded for a good Result in a Race of a specific size.
     """
     result = ForeignKeyField(verbose_name='Result awarding Upgrade Points',
-                             model=Result, backref='points', on_update='CASCADE', on_delete='CASCADE', primary_key=True)
+                             model=Result, backref='points', on_update='RESTRICT', on_delete='RESTRICT', primary_key=True)
     value = CharField(verbose_name='Points Earned for Result', default='0')
     notes = CharField(verbose_name='Notes', default='')
     needs_upgrade = BooleanField(verbose_name='Needs Upgrade', default=False)
@@ -155,9 +152,9 @@ class Points(ObraModel):
 
 class PendingUpgrade(ObraModel):
     result = ForeignKeyField(verbose_name='Result with Pending Upgrade',
-                             model=Result, backref='pending', on_update='CASCADE', on_delete='CASCADE', primary_key=True)
+                             model=Result, backref='pending', on_update='RESTRICT', on_delete='RESTRICT', primary_key=True)
     upgrade_confirmation = ForeignKeyField(verbose_name='Member Data Confirming Upgrade',
-                                           model=ObraPersonSnapshot, backref='pending', on_update='CASCADE', on_delete='CASCADE')
+                                           model=ObraPersonSnapshot, backref='pending', on_update='RESTRICT', on_delete='RESTRICT')
     discipline = CharField(verbose_name='Upgrade Discipline', index=True)
 
 
@@ -166,7 +163,7 @@ class Rank(ObraModel):
     Rank points associated with a Result
     """
     result = ForeignKeyField(verbose_name='Rank from Result',
-                             model=Result, backref='rank', on_update='CASCADE', on_delete='CASCADE', primary_key=True)
+                             model=Result, backref='rank', on_update='RESTRICT', on_delete='RESTRICT', primary_key=True)
     value = IntegerField(verbose_name='Rank for Place')
 
 
@@ -175,7 +172,7 @@ class Quality(ObraModel):
     Race Quality figures for a Race
     """
     race = ForeignKeyField(verbose_name='Quality Race',
-                           model=Race, backref='quality', on_update='CASCADE', on_delete='CASCADE')
+                           model=Race, backref='quality', on_update='RESTRICT', on_delete='RESTRICT')
     value = IntegerField(verbose_name='Race Quality')
     points_per_place = IntegerField(verbose_name='Points per Place')
 

@@ -246,8 +246,8 @@ def sum_points(upgrade_discipline):
             result.points = [Points.create(result=result, value=0)]
 
         if result.points:
-            if ((needed_upgrade() and can_upgrade(upgrade_discipline, points_sum(), upgrade_category, cat_points) and upgrade_race != result.race) or
-                needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points)):
+            if (needs_upgrade(result.person, upgrade_discipline, points_sum(), upgrade_category, cat_points) or
+                (needed_upgrade() and can_upgrade(upgrade_discipline, points_sum(), upgrade_category, cat_points) and upgrade_race != result.race)):
                 # If they needed an upgrade last time, and still can upgrade, but didn't upgrade yet...
                 # Or if they need an upgrade now...
                 upgrade_notes.append('NEEDS UPGRADE')
@@ -335,7 +335,8 @@ def confirm_pending_upgrades(upgrade_discipline):
             (PendingUpgrade.insert(result_id=result.id,
                                    upgrade_confirmation_id=result.points[0].upgrade_confirmation_id,
                                    discipline=upgrade_discipline)
-                           .on_conflict_replace()
+                           .on_conflict(conflict_target=[PendingUpgrade.result],
+                                        preserve=[PendingUpgrade.upgrade_confirmation, PendingUpgrade.discipline])
                            .execute())
 
 
@@ -443,6 +444,7 @@ def needs_upgrade(person, upgrade_discipline, points_sum, category, cat_points):
     Determine if the rider needs an upgrade for this discipline
     """
     if upgrade_discipline in UPGRADES and category in UPGRADES[upgrade_discipline]:
+        logger.debug('Checking upgrade schedule for upgrade_discipline={} category={}'.format(upgrade_discipline, category))
         if 'podiums' in UPGRADES[upgrade_discipline][category]:
             # FIXME - also need to check field size and gender
             podiums = UPGRADES[upgrade_discipline][category]['podiums']
