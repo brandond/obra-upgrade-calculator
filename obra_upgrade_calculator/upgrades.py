@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 Point = namedtuple('Point', 'value,place,date')
 
 
-@db.atomic()
+@db.savepoint()
 def recalculate_points(upgrade_discipline, incremental=False):
     """
     Create Points for qualifying Results for all Races of this type.
@@ -90,7 +90,7 @@ def recalculate_points(upgrade_discipline, incremental=False):
     return points_created
 
 
-@db.atomic()
+@db.savepoint()
 def sum_points(upgrade_discipline):
     """
     Calculate running points totals and detect upgrades
@@ -283,7 +283,7 @@ def sum_points(upgrade_discipline):
             result.points[0].notes if result.points else ''))
 
 
-@db.atomic()
+@db.savepoint()
 def confirm_pending_upgrades(upgrade_discipline):
     """
     Since upgrades are recognized the next race after they're earned,
@@ -339,7 +339,6 @@ def confirm_pending_upgrades(upgrade_discipline):
                            .execute())
 
 
-@db.atomic()
 def print_points(upgrade_discipline, output_format):
     """
     Print out points tally for each Person

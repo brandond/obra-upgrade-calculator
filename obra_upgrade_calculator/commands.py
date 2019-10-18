@@ -23,25 +23,27 @@ def cli(discipline, output, scrape, debug):
     # Import these after setting up logging otherwise we don't get logs
     from .scrapers import clean_events, scrape_year, scrape_new, scrape_parents, scrape_recent
     from .upgrades import confirm_pending_upgrades, recalculate_points, print_points, sum_points
+    from .models import db
 
-    if scrape:
-        # Scrape last 5 years of results
-        cur_year = date.today().year
-        for year in range(cur_year - 6, cur_year + 1):
-            scrape_year(year, discipline)
-            scrape_parents(year, discipline)
-            clean_events(year, discipline)
+    with db.atomic('IMMEDIATE'):
+        if scrape:
+            # Scrape last 5 years of results
+            cur_year = date.today().year
+            for year in range(cur_year - 6, cur_year + 1):
+                scrape_year(year, discipline)
+                scrape_parents(year, discipline)
+                clean_events(year, discipline)
 
-        # Load in anything new
-        scrape_new(discipline)
+            # Load in anything new
+            scrape_new(discipline)
 
-        # Check for updates to anything touched in the last three days
-        scrape_recent(discipline, 3)
+            # Check for updates to anything touched in the last three days
+            scrape_recent(discipline, 3)
 
-    # Calculate points from new data
-    if recalculate_points(discipline, incremental=False):
-        sum_points(discipline)
-        confirm_pending_upgrades(discipline)
+        # Calculate points from new data
+        if recalculate_points(discipline, incremental=False):
+            sum_points(discipline)
+            confirm_pending_upgrades(discipline)
 
     # Finally, output data
     print_points(discipline, output)

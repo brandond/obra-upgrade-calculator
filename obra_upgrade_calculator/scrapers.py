@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 baseurl = 'https://obra.org'
 
 
-@db.atomic()
+@db.savepoint()
 def scrape_year(year, upgrade_discipline):
     """
     Scrape all results for a given year and category
@@ -98,7 +98,6 @@ def scrape_year(year, upgrade_discipline):
                           .execute())
 
 
-@db.atomic()
 def scrape_parents(year, upgrade_discipline):
     """Scrape all Events and check to see if they've got any children"""
     logger.info('Scraping all {} Events to check for children'.format(upgrade_discipline))
@@ -115,26 +114,24 @@ def scrape_parents(year, upgrade_discipline):
     return event_count
 
 
-@db.atomic()
 def scrape_new(upgrade_discipline):
     """Scrape all Events that do not yet have any Races loaded"""
     logger.info('Scraping all {} Events with no Races'.format(upgrade_discipline))
     race_count = 0
-    query = (Event.select()
+    query = (Event.select(Event, fn.COUNT(Race.id).alias('race_count'))
                   .join(Race, src=Event, join_type=JOIN.LEFT_OUTER)
                   .where(Event.ignore == False)
                   .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
-                  .group_by(Event.id)
-                  .having(fn.COUNT(Race.id) == 0))
+                  .group_by(Event))
 
     for event in query.execute():
-        logger.info('Found unscraped Event {}'.format(event.id))
-        race_count += scrape_event(event)
+        logger.info('Found Event [{}]{} with {} races'.format(event.id, event.name, event.race_count))
+        if event.race_count == 0:
+            race_count += scrape_event(event)
 
     return race_count
 
 
-@db.atomic()
 def scrape_recent(upgrade_discipline, days):
     """
     Scrape all events that have had results created in the last N days
@@ -158,6 +155,7 @@ def scrape_recent(upgrade_discipline, days):
     return race_count
 
 
+@db.savepoint()
 def scrape_parent_event(event):
     """Scrape an event with children events. Not sure how this is different from a series?"""
     logger.info("Scraping data for potential parent Event: [{}]{} on {}/{}".format(event.id, event.name, event.year, event.date))
@@ -193,6 +191,7 @@ def scrape_parent_event(event):
     return change_count
 
 
+@db.savepoint()
 def scrape_event(event):
     """Scrape Race Results for a single Event"""
     logger.info('Scraping data for Event: [{}]{} on {}/{}'.format(event.id, event.name, event.year, event.date))
@@ -314,7 +313,7 @@ def scrape_event(event):
     return change_count
 
 
-@db.atomic()
+@db.savepoint()
 def clean_events(year, upgrade_discipline):
     race_count = 0
     query = (Event.select()
