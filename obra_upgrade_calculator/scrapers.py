@@ -302,10 +302,10 @@ def scrape_event(event):
     # Not sure how Candi did it but this makes sense to me
     for race_id, scrape_flag in races.items():
         if scrape_flag:
-            starters = (Result.select(fn.COUNT(Result.id))
+            starters = (Result.select()
                               .where(~(Result.place.contains('dns')))
                               .where(Result.race_id == race_id)
-                              .scalar())
+                              .count())
             logger.info('Counted {} starters for race [{}]'.format(starters, race_id))
             change_count += 1
             (Race.update({Race.starters: starters})

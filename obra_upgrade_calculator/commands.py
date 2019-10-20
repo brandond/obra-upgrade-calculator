@@ -23,6 +23,7 @@ def cli(discipline, output, scrape, debug):
     # Import these after setting up logging otherwise we don't get logs
     from .scrapers import clean_events, scrape_year, scrape_new, scrape_parents, scrape_recent
     from .upgrades import confirm_pending_upgrades, recalculate_points, print_points, sum_points
+    from .rankings import calculate_race_ranks
     from .models import db
 
     with db.atomic('IMMEDIATE'):
@@ -42,6 +43,7 @@ def cli(discipline, output, scrape, debug):
 
         # Calculate points from new data
         if recalculate_points(discipline, incremental=False):
+            calculate_race_ranks(discipline, incremental=False)
             sum_points(discipline)
             confirm_pending_upgrades(discipline)
 

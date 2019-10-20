@@ -7,7 +7,8 @@ from os.path import expanduser
 
 from peewee import AutoField, BooleanField, Model
 from playhouse.apsw_ext import (APSWDatabase, CharField, DateField,
-                                DateTimeField, ForeignKeyField, IntegerField)
+                                DateTimeField, DecimalField, ForeignKeyField,
+                                IntegerField)
 from playhouse.sqlite_ext import JSONField
 
 db = APSWDatabase(expanduser('~/.obra.sqlite3'),
@@ -164,7 +165,7 @@ class Rank(ObraModel):
     """
     result = ForeignKeyField(verbose_name='Rank from Result',
                              model=Result, backref='rank', on_update='RESTRICT', on_delete='RESTRICT', primary_key=True)
-    value = IntegerField(verbose_name='Rank for Place')
+    value = DecimalField(verbose_name='Rank for Place', decimal_places=2)
 
 
 class Quality(ObraModel):
@@ -173,8 +174,8 @@ class Quality(ObraModel):
     """
     race = ForeignKeyField(verbose_name='Quality Race',
                            model=Race, backref='quality', on_update='RESTRICT', on_delete='RESTRICT')
-    value = IntegerField(verbose_name='Race Quality')
-    points_per_place = IntegerField(verbose_name='Points per Place')
+    value = DecimalField(verbose_name='Race Quality', decimal_places=2)
+    points_per_place = DecimalField(verbose_name='Points per Place', decimal_places=2)
 
 
 with db.connection_context():
