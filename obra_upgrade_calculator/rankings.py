@@ -47,6 +47,10 @@ def get_ranks(upgrade_discipline, end_date=None, person_ids=[]):
 def calculate_race_ranks(upgrade_discipline, incremental=False):
     # Delete all Rank and Quality data for this discipline and recalc from scratch
 
+    category_filter = (Race.categories.length() != 0)
+    if upgrade_discipline == 'cyclocross':
+        category_filter |= ((Race.name ** '%single%') & ~(Race.name ** '%person%'))
+
     if not incremental:
         (Rank.delete()
              .where(Rank.result_id << (Result.select(Result.id)
@@ -69,7 +73,7 @@ def calculate_race_ranks(upgrade_discipline, incremental=False):
                                               .join(Event, src=Race)
                                               .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])))
                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
-                 .where(Race.categories.length() != 0)  # | (Race.name ** '%single%'))  #<-- uncomment to include SS
+                 .where(category_filter)
                  .order_by(Race.date.asc(), Race.created.asc()))
 
     for race in races:

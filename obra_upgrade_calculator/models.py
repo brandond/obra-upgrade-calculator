@@ -64,7 +64,7 @@ class Race(ObraModel):
     A single race at an event, with one or more results.
     """
     id = IntegerField(verbose_name='Race ID', primary_key=True)
-    name = CharField(verbose_name='Race Name')
+    name = CharField(verbose_name='Race Name', index=True)
     date = DateField(verbose_name='Race Date')
     categories = JSONField(verbose_name='Race Categories')
     starters = IntegerField(verbose_name='Race Starting Field Size', default=0)
