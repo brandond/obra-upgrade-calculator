@@ -19,7 +19,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def get_ranks(upgrade_discipline, end_date=None):
+def get_ranks(upgrade_discipline, end_date=None, person_ids=[]):
     """
     Return a dict of everyone's rank for this discipline as of a given date
     """
@@ -27,8 +27,8 @@ def get_ranks(upgrade_discipline, end_date=None):
         end_date = date.today()
     start_date = end_date - timedelta(days=365)
 
-    ranks = [600] * 5
-    query = (Rank.select(Result.person_id, fn.json_group_array(Rank.value, coerce=False))
+    default_ranks = [600] * 5
+    query = (Rank.select(Result.person_id, fn.json_group_array(Rank.value).python_value(json.loads))
                  .join(Result, src=Rank)
                  .join(Race, src=Result)
                  .join(Event, src=Race)
@@ -37,8 +37,11 @@ def get_ranks(upgrade_discipline, end_date=None):
                  .where(Event.discipline << DISCIPLINE_MAP[upgrade_discipline])
                  .group_by(Result.person_id))
 
+    if person_ids:
+        query = query.where(Result.person_id << person_ids)
+
     logger.debug('Got {} People in {} between {} and {}'.format(query.count(), upgrade_discipline, start_date, end_date))
-    return defaultdict(lambda: 600, ((k, sum(sorted(ranks + json.loads(v))[:5]) / 5) for k, v in query.tuples()))
+    return defaultdict(lambda: 600, ((person_id, sum(sorted(default + ranks)[:5]) / 5) for person_id, ranks in query.tuples()))
 
 
 def calculate_race_ranks(upgrade_discipline, incremental=False):
